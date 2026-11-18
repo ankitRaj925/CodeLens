@@ -1,0 +1,973 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>CodeLens</title>
+<script>
+  // Apply the saved theme before the page paints, to avoid a flash of the wrong theme
+  try {
+    var savedTheme = localStorage.getItem("codelens-theme");
+    if (savedTheme) document.documentElement.setAttribute("data-theme", savedTheme);
+  } catch (e) { /* storage not available */ }
+</script>
+<style>
+  :root {
+    color-scheme: light;
+    --bg: #f3f4f6; --card: #ffffff; --surface: #f8fafc;
+    --text: #0b1220; --muted: #475569; --border: #d0d5dd;
+    --accent: #2563eb; --accent-hover: #1d4ed8; --link: #2563eb; --accent-soft: rgba(37, 99, 235, 0.1);
+    --code: #f1f5f9; --user: #2563eb;
+    --danger: #dc2626; --danger-hover: #b91c1c; --err: #b91c1c; --ok: #15803d;
+    --ring: rgba(37, 99, 235, 0.28); --shadow: rgba(15, 23, 42, 0.16);
+    --topbar: 60px; --h: 44px;
+  }
+  /* Dark theme: follows the system unless the user picked light */
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      color-scheme: dark;
+      --bg: #0d1117; --card: #161b22; --surface: #0d1117;
+      --text: #e6edf3; --muted: #9ba7b4; --border: #30363d;
+      --accent: #1f6feb; --accent-hover: #388bfd; --link: #58a6ff; --accent-soft: rgba(88, 166, 255, 0.16);
+      --code: #0d1117; --user: #1f6feb;
+      --danger: #da3633; --danger-hover: #f85149; --err: #ff7b72; --ok: #3fb950;
+      --ring: rgba(56, 139, 253, 0.4); --shadow: rgba(1, 4, 9, 0.6);
+    }
+  }
+  /* Dark theme: chosen manually with the toggle */
+  :root[data-theme="dark"] {
+    color-scheme: dark;
+    --bg: #0d1117; --card: #161b22; --surface: #0d1117;
+    --text: #e6edf3; --muted: #9ba7b4; --border: #30363d;
+    --accent: #1f6feb; --accent-hover: #388bfd; --link: #58a6ff; --accent-soft: rgba(88, 166, 255, 0.16);
+    --code: #0d1117; --user: #1f6feb;
+    --danger: #da3633; --danger-hover: #f85149; --err: #ff7b72; --ok: #3fb950;
+    --ring: rgba(56, 139, 253, 0.4); --shadow: rgba(1, 4, 9, 0.6);
+  }
+
+  * { box-sizing: border-box; }
+  [hidden] { display: none !important; }
+  body {
+    margin: 0; min-height: 100dvh; display: flex; flex-direction: column;
+    background: var(--bg); color: var(--text);
+    font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; line-height: 1.5;
+  }
+  .ico { width: 18px; height: 18px; flex-shrink: 0; }
+  a { color: var(--link); }
+  ::placeholder { color: var(--muted); opacity: 0.85; }
+
+  /* ---------- Buttons: smooth hover lift, press effect, keyboard focus ring ---------- */
+  button {
+    font-family: inherit; font-size: 14px; font-weight: 600; cursor: pointer; border: 1px solid transparent;
+    border-radius: 10px; padding: 10px 16px; display: inline-flex; align-items: center; justify-content: center; gap: 8px;
+    transition: transform 0.18s ease, box-shadow 0.18s ease, background-color 0.18s ease,
+                border-color 0.18s ease, color 0.18s ease, opacity 0.18s ease;
+  }
+  button:hover:not(:disabled) { transform: translateY(-2px); }
+  button:active:not(:disabled) { transform: translateY(0) scale(0.97); }
+  button:disabled { opacity: 0.5; cursor: not-allowed; }
+  button:focus-visible, input:focus-visible, summary:focus-visible {
+    outline: 2px solid var(--accent); outline-offset: 2px;
+  }
+  .btn-primary { color: #fff; background: var(--accent); }
+  .btn-primary:hover:not(:disabled) { background: var(--accent-hover); box-shadow: 0 6px 16px var(--shadow); }
+  .btn-danger { color: #fff; background: var(--danger); }
+  .btn-danger:hover:not(:disabled) { background: var(--danger-hover); box-shadow: 0 6px 16px var(--shadow); }
+  .btn-ghost { color: var(--text); background: var(--card); border-color: var(--border); }
+  .btn-ghost:hover:not(:disabled) { border-color: var(--accent); color: var(--link); box-shadow: 0 6px 16px var(--shadow); }
+  .btn-sm { padding: 6px 10px; font-size: 12px; border-radius: 8px; }
+  .icon-btn { width: 40px; height: 40px; padding: 0; }
+  .send { width: 44px; height: 44px; padding: 0; border-radius: 50%; flex-shrink: 0; }
+  .row > button { height: var(--h); white-space: nowrap; flex-shrink: 0; }
+
+  /* ---------- Top bar ---------- */
+  .topbar {
+    height: var(--topbar); display: flex; align-items: center; justify-content: space-between;
+    padding: 0 clamp(12px, 3vw, 32px); background: var(--card);
+    border-bottom: 1px solid var(--border); position: sticky; top: 0; z-index: 20;
+  }
+  .brand { display: flex; align-items: center; gap: 12px; }
+  .logo { width: 34px; height: 34px; border-radius: 9px; background: var(--accent); color: #fff; display: inline-flex; align-items: center; justify-content: center; }
+  .brand-text { display: flex; flex-direction: column; line-height: 1.15; }
+  h1 { margin: 0; font-size: 20px; letter-spacing: -0.2px; color: var(--text); }
+  .tagline { margin: 0; font-size: 12px; color: var(--muted); }
+
+  /* ---------- Layout ---------- */
+  .layout {
+    flex: 1; width: 100%; max-width: 1600px; margin: 0 auto;
+    padding: 16px clamp(12px, 3vw, 32px);
+    display: grid; grid-template-columns: minmax(320px, 400px) minmax(0, 1fr);
+    gap: 16px; align-items: start;
+  }
+  .side { display: flex; flex-direction: column; gap: 16px; min-width: 0; }
+  .chatpanel {
+    display: flex; flex-direction: column; min-height: 0; min-width: 0;
+    height: calc(100dvh - var(--topbar) - 32px);
+    position: sticky; top: calc(var(--topbar) + 16px);
+  }
+  .card { background: var(--card); border: 1px solid var(--border); border-radius: 14px; padding: 16px; }
+  .card h2, .card-head h2 { margin: 0 0 12px; font-size: 12px; font-weight: 700; color: var(--muted); text-transform: uppercase; letter-spacing: 0.8px; }
+  .card-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-bottom: 8px; }
+  .card-head h2 { margin: 0; }
+  .note { margin: 10px 0 0; font-size: 12px; color: var(--muted); }
+  .row { display: flex; gap: 8px; align-items: center; }
+  .muted { color: var(--muted); font-size: 13px; }
+
+  input[type=text] {
+    flex: 1; min-width: 0; width: 100%; height: var(--h); padding: 0 14px; font-size: 15px; font-family: inherit;
+    border: 1px solid var(--border); border-radius: 10px; background: var(--surface); color: var(--text);
+    transition: border-color 0.18s ease, box-shadow 0.18s ease;
+  }
+  input[type=text]:focus { outline: none; border-color: var(--accent); box-shadow: 0 0 0 3px var(--ring); }
+  input:disabled { opacity: 0.6; cursor: not-allowed; }
+
+  .status { margin-top: 10px; font-size: 14px; min-height: 20px; overflow-wrap: anywhere; }
+  .status.ok { color: var(--ok); }
+  .status.err { color: var(--err); }
+
+  .progress { margin-top: 12px; }
+  .progress-top { display: flex; justify-content: space-between; gap: 8px; font-size: 13px; color: var(--muted); margin-bottom: 6px; }
+  .bar { height: 8px; border-radius: 4px; background: var(--surface); border: 1px solid var(--border); overflow: hidden; }
+  .bar-fill { height: 100%; width: 0; background: var(--accent); transition: width 0.4s ease; }
+
+  /* ---------- Indexed files box ---------- */
+  details.files { margin-top: 12px; border: 1px solid var(--border); border-radius: 10px; background: var(--surface); }
+  details.files summary { list-style: none; cursor: pointer; display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 10px 14px; font-size: 14px; font-weight: 600; }
+  details.files summary::-webkit-details-marker { display: none; }
+  details.files summary::after {
+    content: ""; width: 7px; height: 7px; margin: 0 4px 2px 0; flex-shrink: 0;
+    border-right: 2px solid var(--muted); border-bottom: 2px solid var(--muted);
+    transform: rotate(-45deg); transition: transform 0.18s ease;
+  }
+  details.files[open] summary::after { transform: rotate(45deg); margin-bottom: 4px; }
+  details.files .summary-right { margin-left: auto; }
+  details.files pre { margin: 0; padding: 10px 14px; max-height: 260px; overflow: auto; font-size: 12px; border-top: 1px solid var(--border); }
+
+  /* ---------- Repository dropdown (custom, so the open list matches the design) ---------- */
+  .dd { position: relative; flex: 1; min-width: 0; }
+  button.dd-btn {
+    width: 100%; height: var(--h); padding: 0 14px; justify-content: space-between; gap: 10px;
+    font-size: 15px; font-weight: 400; text-align: left; color: var(--text);
+    background: var(--surface); border: 1px solid var(--border); border-radius: 10px;
+  }
+  button.dd-btn:hover:not(:disabled), button.dd-btn:active:not(:disabled) { transform: none; border-color: var(--accent); }
+  .dd.open button.dd-btn { border-color: var(--accent); box-shadow: 0 0 0 3px var(--ring); }
+  .dd-label { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .dd-caret { display: inline-flex; color: var(--muted); transition: transform 0.18s ease; }
+  .dd.open .dd-caret { transform: rotate(180deg); }
+  .dd-list {
+    position: absolute; z-index: 30; left: 0; right: 0; top: calc(100% + 6px); margin: 0; padding: 6px;
+    list-style: none; max-height: 260px; overflow-y: auto; background: var(--card);
+    border: 1px solid var(--border); border-radius: 12px; box-shadow: 0 14px 34px var(--shadow);
+    animation: pop 0.14s ease;
+  }
+  @keyframes pop { from { opacity: 0; transform: translateY(-4px); } to { opacity: 1; transform: none; } }
+  .dd-item { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 9px 12px; border-radius: 8px; cursor: pointer; font-size: 14px; }
+  .dd-item.active { background: var(--accent-soft); }
+  .dd-item.selected .dd-name { color: var(--link); font-weight: 600; }
+  .dd-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .dd-meta { color: var(--muted); font-size: 12px; flex-shrink: 0; }
+
+  /* ---------- Chat ---------- */
+  #chat { flex: 1; overflow-y: auto; display: flex; flex-direction: column; gap: 14px; padding: 4px 4px 4px 0; min-height: 160px; }
+  .empty { margin: auto; color: var(--muted); text-align: center; padding: 20px; max-width: 420px; }
+  .msg { max-width: 88%; padding: 12px 14px; border-radius: 14px; overflow-wrap: anywhere; animation: rise 0.25s ease; }
+  @keyframes rise { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: none; } }
+  .msg.user { align-self: flex-end; background: var(--user); color: #fff; border-bottom-right-radius: 4px; }
+  .msg.bot { align-self: flex-start; background: var(--surface); border: 1px solid var(--border); border-bottom-left-radius: 4px; width: 100%; max-width: 100%; }
+  .msg-head { display: flex; align-items: center; gap: 8px; margin-bottom: 8px; font-size: 13px; font-weight: 700; color: var(--text); }
+  .avatar { width: 22px; height: 22px; border-radius: 6px; background: var(--accent); color: #fff; display: inline-flex; align-items: center; justify-content: center; }
+  .avatar .ico { width: 14px; height: 14px; }
+  .typing { display: inline-flex; gap: 4px; padding: 4px 0; }
+  .typing i { width: 7px; height: 7px; border-radius: 50%; background: var(--muted); animation: bounce 1.1s infinite ease-in-out; }
+  .typing i:nth-child(2) { animation-delay: 0.15s; }
+  .typing i:nth-child(3) { animation-delay: 0.3s; }
+  @keyframes bounce { 0%, 80%, 100% { transform: scale(0.6); opacity: 0.5; } 40% { transform: scale(1); opacity: 1; } }
+
+  /* Rendered markdown */
+  .answer > :first-child { margin-top: 0; }
+  .answer > :last-child { margin-bottom: 0; }
+  .answer p { margin: 0 0 10px; white-space: pre-wrap; }
+  .answer ul, .answer ol { margin: 0 0 10px; padding-left: 22px; }
+  .answer li { margin: 3px 0; }
+  .answer blockquote { margin: 0 0 10px; padding: 4px 12px; border-left: 3px solid var(--accent); color: var(--muted); }
+  .md-h { font-weight: 700; margin: 14px 0 6px; }
+  .md-h1 { font-size: 1.25em; } .md-h2 { font-size: 1.15em; } .md-h3, .md-h4 { font-size: 1.05em; }
+  .table-wrap { overflow-x: auto; margin: 0 0 10px; border: 1px solid var(--border); border-radius: 8px; }
+  .answer table { border-collapse: collapse; width: 100%; font-size: 13px; }
+  .answer th, .answer td { padding: 7px 10px; border-bottom: 1px solid var(--border); text-align: left; }
+  .answer th { background: var(--code); }
+  .answer tr:last-child td { border-bottom: none; }
+  code { font-family: ui-monospace, Consolas, monospace; font-size: 13px; }
+  .answer :not(pre) > code { background: var(--code); border: 1px solid var(--border); padding: 0 5px; border-radius: 5px; }
+  .codeblock { margin: 0 0 10px; border: 1px solid var(--border); border-radius: 8px; overflow: hidden; background: var(--code); }
+  .code-head { display: flex; justify-content: space-between; align-items: center; padding: 4px 6px 4px 12px; font-size: 12px; color: var(--muted); border-bottom: 1px solid var(--border); }
+  .codeblock pre { margin: 0; padding: 10px 12px; overflow-x: auto; }
+  a.cite {
+    display: inline-block; min-width: 18px; text-align: center; padding: 0 5px; margin: 0 1px;
+    font-size: 12px; font-weight: 700; text-decoration: none; color: #fff; background: var(--accent);
+    border-radius: 9px; transition: transform 0.15s ease;
+  }
+  a.cite:hover { transform: translateY(-2px) scale(1.1); }
+
+  .sources { margin-top: 12px; border-top: 1px solid var(--border); padding-top: 10px; }
+  .sources-title { font-size: 12px; font-weight: 700; color: var(--muted); text-transform: uppercase; letter-spacing: 0.6px; margin-bottom: 6px; }
+  details.src { border: 1px solid var(--border); border-radius: 8px; margin-bottom: 6px; background: var(--card); transition: border-color 0.18s ease; }
+  details.src:hover { border-color: var(--accent); }
+  details.src summary { cursor: pointer; padding: 8px 10px; font-size: 13px; display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+  details.src pre { margin: 0; padding: 10px; background: var(--code); overflow-x: auto; font-size: 12px; border-top: 1px solid var(--border); }
+  .badge { background: var(--accent); color: #fff; font-size: 11px; font-weight: 700; border-radius: 9px; padding: 0 7px; }
+  .sim { color: var(--ok); font-size: 12px; font-weight: 700; margin-left: auto; }
+  .gh { font-size: 12px; text-decoration: none; padding: 6px 10px 8px; display: inline-block; }
+  .flash { animation: flash 1.2s ease; }
+  @keyframes flash { 0%, 60% { box-shadow: 0 0 0 3px var(--accent); } 100% { box-shadow: 0 0 0 0 transparent; } }
+  .msg-actions { margin-top: 10px; display: flex; gap: 6px; }
+
+  .chips { display: flex; gap: 8px; flex-wrap: wrap; margin: 12px 0 0; }
+  .chip { font-weight: 500; font-size: 13px; padding: 7px 14px; border-radius: 18px; color: var(--text); background: var(--card); border-color: var(--border); }
+  .chip:hover:not(:disabled) { border-color: var(--accent); color: var(--link); box-shadow: 0 6px 16px var(--shadow); }
+
+  /* Message box with the round send / stop button inside */
+  .composer {
+    display: flex; align-items: center; gap: 8px; margin-top: 10px; padding: 6px 6px 6px 18px;
+    border: 1px solid var(--border); border-radius: 30px; background: var(--surface);
+    transition: border-color 0.18s ease, box-shadow 0.18s ease;
+  }
+  .composer:focus-within { border-color: var(--accent); box-shadow: 0 0 0 3px var(--ring); }
+  .composer input[type=text] { height: 32px; padding: 0; border: none; background: transparent; box-shadow: none !important; outline: none !important; }
+
+  /* ---------- Tablets and phones ---------- */
+  @media (max-width: 900px) {
+    .layout { grid-template-columns: 1fr; }
+    .chatpanel { height: auto; min-height: 70dvh; position: static; }
+    #chat { overflow: visible; }
+    .composer-wrap {
+      position: sticky; bottom: 0; background: var(--card);
+      padding-bottom: calc(8px + env(safe-area-inset-bottom)); padding-top: 4px;
+    }
+    .msg { max-width: 94%; }
+  }
+  @media (max-width: 480px) {
+    .card { padding: 12px; }
+    .tagline { display: none; }
+    .label-hide { display: none; }
+  }
+  @media (prefers-reduced-motion: reduce) {
+    *, *::before, *::after { animation-duration: 0.01ms !important; transition-duration: 0.01ms !important; }
+  }
+</style>
+</head>
+<body>
+  <header class="topbar">
+    <div class="brand">
+      <span class="logo" data-icon="code"></span>
+      <div class="brand-text">
+        <h1>CodeLens</h1>
+        <p class="tagline">Ask questions about any public GitHub repository</p>
+      </div>
+    </div>
+    <button type="button" class="btn-ghost icon-btn" id="themeBtn" aria-label="Toggle dark and light theme"></button>
+  </header>
+
+  <main class="layout">
+    <div class="side">
+      <section class="card">
+        <h2>Index a repository</h2>
+        <form id="indexForm" autocomplete="off">
+          <div class="row">
+            <input type="text" id="repoUrl" placeholder="https://github.com/owner/repo" aria-label="GitHub repository URL">
+            <button type="submit" class="btn-primary" id="indexBtn">Index</button>
+          </div>
+        </form>
+        <div class="progress" id="progress" hidden>
+          <div class="progress-top"><span id="progressStage">Starting...</span><span id="progressPct">0%</span></div>
+          <div class="bar"><div class="bar-fill" id="barFill"></div></div>
+        </div>
+        <div class="status" id="status" role="status"></div>
+        <p class="note">Public repositories only. The docs and tests folders are skipped.</p>
+      </section>
+
+      <section class="card">
+        <h2>Repository</h2>
+        <div class="row">
+          <div class="dd" id="repoDd">
+            <button type="button" class="dd-btn" id="repoBtn" aria-haspopup="listbox" aria-expanded="false" aria-controls="repoList" aria-label="Indexed repositories">
+              <span class="dd-label" id="repoLabel">No repository indexed yet</span>
+              <span class="dd-caret" data-icon="chevron"></span>
+            </button>
+            <ul class="dd-list" id="repoList" role="listbox" hidden></ul>
+          </div>
+          <button type="button" class="btn-danger" id="deleteBtn" title="Delete this repository"><span data-icon="trash"></span><span class="label-hide">Delete</span></button>
+        </div>
+        <details class="files" id="filesBox">
+          <summary><span>Indexed files</span><span class="summary-right muted" id="fileCount"></span></summary>
+          <pre id="fileTree">No repository selected.</pre>
+        </details>
+      </section>
+    </div>
+
+    <section class="card chatpanel">
+      <div class="card-head">
+        <h2>Chat</h2>
+        <button type="button" class="btn-ghost btn-sm" id="newChatBtn" title="New chat (Alt+N)"><span data-icon="plus"></span>New chat</button>
+      </div>
+      <div id="chat"><div class="empty" id="emptyState">Index or select a repository, then ask a question or tap a suggestion. Follow-up questions remember the last few messages.</div></div>
+      <div class="composer-wrap">
+        <div class="chips" id="chips"></div>
+        <form class="composer" id="askForm" autocomplete="off">
+          <input type="text" id="question" maxlength="1000" placeholder="Ask about the code..." aria-label="Your question">
+          <button type="submit" class="btn-primary send" id="sendBtn" aria-label="Send"><span id="sendIcon"></span></button>
+        </form>
+      </div>
+    </section>
+  </main>
+
+<script>
+  const $ = (id) => document.getElementById(id);
+  const SUGGESTIONS = [
+    "Give me an overview of this repository",
+    "How do I install and run it?",
+    "What are the main modules and what do they do?",
+    "Where is the entry point?",
+  ];
+
+  // ---------- Icons ----------
+  const ICONS = {
+    moon: '<path d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8z"/>',
+    sun: '<circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"/>',
+    send: '<path d="M12 19V5M5 12l7-7 7 7"/>',
+    stop: '<rect x="6" y="6" width="12" height="12" rx="2" fill="currentColor" stroke="none"/>',
+    trash: '<path d="M3 6h18M8 6V4h8v2M19 6l-1 14H6L5 6M10 11v6M14 11v6"/>',
+    plus: '<path d="M12 5v14M5 12h14"/>',
+    copy: '<rect x="9" y="9" width="11" height="11" rx="2"/><path d="M5 15V6a2 2 0 0 1 2-2h9"/>',
+    check: '<path d="M5 13l4 4L19 7"/>',
+    chevron: '<path d="M6 9l6 6 6-6"/>',
+    code: '<path d="M8 8l-4 4 4 4M16 8l4 4-4 4M14 5l-4 14"/>',
+  };
+  function svg(name) {
+    return '<svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" ' +
+      'stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">' + ICONS[name] + "</svg>";
+  }
+  document.querySelectorAll("[data-icon]").forEach((el) => { el.innerHTML = svg(el.dataset.icon); });
+
+  // ---------- State ----------
+  let msgCounter = 0;
+  let hasRepo = false;
+  let streaming = false;
+  let abortCtl = null;
+  let chatHistory = [];      // sent to the server so follow-up questions work
+  let answers = {};          // raw answer text per message, used by the Copy button
+  let lastChip = null;
+  let repos = [];            // indexed repositories from the server
+  let selectedRepo = "";     // "owner/name" of the chosen repository
+
+  // ---------- Helpers ----------
+  // Escapes HTML so text from the server can never inject markup
+  function esc(s) {
+    return String(s).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
+  }
+  const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+
+  async function readError(res) {
+    let data = null;
+    try { data = await res.json(); } catch (e) { /* no JSON body */ }
+    let detail = data && data.detail;
+    if (Array.isArray(detail)) detail = detail.map((d) => d.msg).join("; ");
+    return new Error(detail || "Request failed (" + res.status + ")");
+  }
+
+  async function api(path, options = {}) {
+    const res = await fetch(path, { headers: { "Content-Type": "application/json" }, ...options });
+    if (!res.ok) throw await readError(res);
+    return res.json();
+  }
+
+  function setStatus(message, kind) {
+    const el = $("status");
+    el.className = "status " + (kind || "");
+    el.textContent = message;
+  }
+
+  async function copyText(text) {
+    try { await navigator.clipboard.writeText(text); return true; } catch (e) {
+      const ta = document.createElement("textarea");
+      ta.value = text; ta.style.position = "fixed"; ta.style.opacity = "0";
+      document.body.appendChild(ta); ta.select();
+      let ok = false;
+      try { ok = document.execCommand("copy"); } catch (_) { /* ignore */ }
+      ta.remove();
+      return ok;
+    }
+  }
+
+  // ---------- Markdown rendering ----------
+  function inlineMd(raw, msgId) {
+    const stash = [];
+    const keep = (html) => { stash.push(html); return "\u0000" + (stash.length - 1) + "\u0000"; };
+    let t = esc(raw);
+    t = t.replace(/`([^`\n]+)`/g, (m, c) => keep("<code>" + c + "</code>"));
+    t = t.replace(/\[([^\]\n]+)\]\((https?:\/\/[^\s)]+)\)/g,
+      (m, label, url) => keep('<a href="' + url + '" target="_blank" rel="noopener noreferrer">' + label + "</a>"));
+    t = t.replace(/\*\*([^*\n]+)\*\*/g, "<strong>$1</strong>");
+    t = t.replace(/(^|[^*\w])\*(?!\s)([^*\n]*?[^*\s])\*(?![*\w])/g, "$1<em>$2</em>");
+    t = t.replace(/\[(\d+)\]/g, (m, n) =>
+      '<a class="cite" href="#" data-msg="' + msgId + '" data-ref="' + n + '">' + n + "</a>");
+    let prev;
+    do {
+      prev = t;
+      t = t.replace(/\u0000(\d+)\u0000/g, (m, i) => stash[i]);
+    } while (t !== prev);
+    return t;
+  }
+
+  function codeBlock(lang, code) {
+    return '<div class="codeblock"><div class="code-head"><span>' + esc(lang || "code") + "</span>" +
+      '<button type="button" class="btn-ghost btn-sm copy-code">' + svg("copy") + "<span>Copy</span></button></div>" +
+      "<pre><code>" + esc(code) + "</code></pre></div>";
+  }
+
+  function renderList(items, msgId) {
+    let html = "";
+    const stack = [];
+    items.forEach((it) => {
+      while (stack.length && it.indent < stack[stack.length - 1].indent) {
+        html += "</li></" + stack.pop().tag + ">";
+      }
+      const top = stack[stack.length - 1];
+      if (!top || it.indent > top.indent) {
+        const tag = it.ordered ? "ol" : "ul";
+        stack.push({ indent: it.indent, tag });
+        html += "<" + tag + "><li>" + inlineMd(it.text, msgId);
+      } else {
+        html += "</li><li>" + inlineMd(it.text, msgId);
+      }
+    });
+    while (stack.length) html += "</li></" + stack.pop().tag + ">";
+    return html;
+  }
+
+  function renderMarkdown(src, msgId) {
+    const lines = src.replace(/\r/g, "").split("\n");
+    const out = [];
+    let i = 0;
+    const isTableSep = (s) => s.includes("-") && /^\s*\|?\s*:?-{2,}:?\s*(\|\s*:?-{2,}:?\s*)*\|?\s*$/.test(s);
+    const splitRow = (s) => {
+      let r = s.trim();
+      if (r.startsWith("|")) r = r.slice(1);
+      if (r.endsWith("|")) r = r.slice(0, -1);
+      return r.split("|").map((c) => c.trim());
+    };
+    const startsBlock = (s) =>
+      /^\s*```/.test(s) || /^#{1,4}\s/.test(s) || /^\s*([-*+]|\d+[.)])\s+/.test(s) || /^\s*>/.test(s);
+
+    while (i < lines.length) {
+      const line = lines[i];
+      if (!line.trim()) { i++; continue; }
+      let m;
+
+      if ((m = line.match(/^\s*```(\w*)/))) {
+        const lang = m[1];
+        const code = [];
+        i++;
+        while (i < lines.length && !/^\s*```\s*$/.test(lines[i])) { code.push(lines[i]); i++; }
+        i++; // skip the closing fence (an unclosed fence just runs to the end while streaming)
+        out.push(codeBlock(lang, code.join("\n")));
+        continue;
+      }
+      if ((m = line.match(/^(#{1,4})\s+(.*)$/))) {
+        out.push('<div class="md-h md-h' + m[1].length + '">' + inlineMd(m[2], msgId) + "</div>");
+        i++;
+        continue;
+      }
+      if (line.includes("|") && i + 1 < lines.length && isTableSep(lines[i + 1])) {
+        const head = splitRow(line);
+        i += 2;
+        const rows = [];
+        while (i < lines.length && lines[i].trim() && lines[i].includes("|")) { rows.push(splitRow(lines[i])); i++; }
+        let html = '<div class="table-wrap"><table><thead><tr>' +
+          head.map((c) => "<th>" + inlineMd(c, msgId) + "</th>").join("") + "</tr></thead><tbody>";
+        rows.forEach((r) => { html += "<tr>" + r.map((c) => "<td>" + inlineMd(c, msgId) + "</td>").join("") + "</tr>"; });
+        out.push(html + "</tbody></table></div>");
+        continue;
+      }
+      if (/^\s*>/.test(line)) {
+        const quote = [];
+        while (i < lines.length && /^\s*>/.test(lines[i])) { quote.push(lines[i].replace(/^\s*>\s?/, "")); i++; }
+        out.push("<blockquote>" + inlineMd(quote.join(" "), msgId) + "</blockquote>");
+        continue;
+      }
+      if (/^\s*([-*+]|\d+[.)])\s+/.test(line)) {
+        const items = [];
+        while (i < lines.length && (m = lines[i].match(/^(\s*)([-*+]|\d+[.)])\s+(.*)$/))) {
+          items.push({ indent: Math.floor(m[1].replace(/\t/g, "  ").length / 2), ordered: /\d/.test(m[2]), text: m[3] });
+          i++;
+        }
+        out.push(renderList(items, msgId));
+        continue;
+      }
+      const para = [line];
+      i++;
+      while (i < lines.length && lines[i].trim() && !startsBlock(lines[i])) { para.push(lines[i]); i++; }
+      out.push("<p>" + inlineMd(para.join("\n"), msgId) + "</p>");
+    }
+    return out.join("");
+  }
+
+  // ---------- Theme ----------
+  function currentTheme() {
+    const attr = document.documentElement.getAttribute("data-theme");
+    if (attr) return attr;
+    return window.matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light";
+  }
+  function updateThemeButton() {
+    const dark = currentTheme() === "dark";
+    $("themeBtn").innerHTML = svg(dark ? "sun" : "moon");
+    $("themeBtn").title = (dark ? "Switch to light mode" : "Switch to dark mode") + " (Alt+T)";
+  }
+  function toggleTheme() {
+    const next = currentTheme() === "dark" ? "light" : "dark";
+    document.documentElement.setAttribute("data-theme", next);
+    try { localStorage.setItem("codelens-theme", next); } catch (e) { /* ignore */ }
+    updateThemeButton();
+  }
+  $("themeBtn").onclick = toggleTheme;
+  updateThemeButton();
+
+  // ---------- Repository dropdown (custom, so the open list matches the design) ----------
+  let ddOpen = false;
+  let ddActive = -1;
+
+  function renderDropdown() {
+    $("repoLabel").textContent = selectedRepo || "No repository indexed yet";
+    const list = $("repoList");
+    list.innerHTML = "";
+    repos.forEach((r, i) => {
+      const li = document.createElement("li");
+      li.className = "dd-item" + (r.repo === selectedRepo ? " selected" : "");
+      li.id = "repoOpt" + i;
+      li.dataset.index = i;
+      li.setAttribute("role", "option");
+      li.setAttribute("aria-selected", r.repo === selectedRepo ? "true" : "false");
+      li.innerHTML = '<span class="dd-name">' + esc(r.repo) + '</span><span class="dd-meta">' + r.total_chunks + " chunks</span>";
+      list.appendChild(li);
+    });
+  }
+  function setActive(i) {
+    ddActive = i;
+    const items = [...$("repoList").children];
+    items.forEach((li, idx) => li.classList.toggle("active", idx === i));
+    if (items[i]) {
+      items[i].scrollIntoView({ block: "nearest" });
+      $("repoBtn").setAttribute("aria-activedescendant", items[i].id);
+    }
+  }
+  function openDropdown() {
+    if (!hasRepo || ddOpen) return;
+    ddOpen = true;
+    $("repoDd").classList.add("open");
+    $("repoList").hidden = false;
+    $("repoBtn").setAttribute("aria-expanded", "true");
+    setActive(Math.max(0, repos.findIndex((r) => r.repo === selectedRepo)));
+  }
+  function closeDropdown(refocus) {
+    if (!ddOpen) return;
+    ddOpen = false;
+    $("repoDd").classList.remove("open");
+    $("repoList").hidden = true;
+    $("repoBtn").setAttribute("aria-expanded", "false");
+    $("repoBtn").removeAttribute("aria-activedescendant");
+    if (refocus) $("repoBtn").focus();
+  }
+  function chooseRepo(name) {
+    if (name !== selectedRepo) {
+      selectedRepo = name;
+      chatHistory = [];          // do not mix the conversation of two repositories
+      renderDropdown();
+      loadTree();
+    }
+    closeDropdown(true);
+  }
+  // Keys while the list is open: returns true when the key was used
+  function handleDropdownKey(e) {
+    const n = repos.length;
+    if (e.key === "ArrowDown") { e.preventDefault(); setActive((ddActive + 1) % n); return true; }
+    if (e.key === "ArrowUp") { e.preventDefault(); setActive((ddActive - 1 + n) % n); return true; }
+    if (e.key === "Home") { e.preventDefault(); setActive(0); return true; }
+    if (e.key === "End") { e.preventDefault(); setActive(n - 1); return true; }
+    if (e.key === "Enter" || e.key === " ") { e.preventDefault(); chooseRepo(repos[ddActive].repo); return true; }
+    if (e.key === "Escape") { e.preventDefault(); closeDropdown(true); return true; }
+    if (e.key === "Tab") closeDropdown(false);
+    return false;
+  }
+  $("repoBtn").addEventListener("click", () => (ddOpen ? closeDropdown(false) : openDropdown()));
+  $("repoBtn").addEventListener("keyup", (e) => { if (e.key === " ") e.preventDefault(); });
+  $("repoList").addEventListener("click", (e) => {
+    const li = e.target.closest(".dd-item");
+    if (li) chooseRepo(repos[+li.dataset.index].repo);
+  });
+  $("repoList").addEventListener("mousemove", (e) => {
+    const li = e.target.closest(".dd-item");
+    if (li && +li.dataset.index !== ddActive) setActive(+li.dataset.index);
+  });
+  document.addEventListener("click", (e) => { if (ddOpen && !e.target.closest("#repoDd")) closeDropdown(false); });
+
+  // ---------- Repositories ----------
+  function updateControls() {
+    // The question box always works (greetings need no repository). Only the suggestions need one.
+    $("question").disabled = streaming;
+    $("sendBtn").disabled = false;          // stays enabled while streaming: it becomes the Stop button
+    $("repoBtn").disabled = !hasRepo;
+    $("deleteBtn").disabled = !hasRepo;
+    document.querySelectorAll(".chip").forEach((c) => { c.disabled = !hasRepo || streaming; });
+  }
+
+  async function loadRepos(preferred) {
+    const data = await api("/repos");
+    const before = selectedRepo;
+    repos = data.repos;
+    hasRepo = repos.length > 0;
+    if (preferred && repos.some((r) => r.repo === preferred)) selectedRepo = preferred;
+    else if (!repos.some((r) => r.repo === selectedRepo)) selectedRepo = hasRepo ? repos[0].repo : "";
+    if (before !== selectedRepo) chatHistory = [];
+    closeDropdown(false);
+    renderDropdown();
+    updateControls();
+    loadTree();
+  }
+
+  async function loadTree() {
+    if (!$("filesBox").open) return;
+    if (!selectedRepo) { $("fileTree").textContent = "No repository selected."; $("fileCount").textContent = ""; return; }
+    $("fileTree").textContent = "Loading...";
+    try {
+      const d = await api("/repos/" + selectedRepo + "/tree");
+      $("fileTree").textContent = d.tree;
+      $("fileCount").textContent = d.total_files + " files";
+    } catch (e) {
+      $("fileTree").textContent = e.message;
+    }
+  }
+  $("filesBox").addEventListener("toggle", loadTree);
+
+  $("deleteBtn").onclick = async () => {
+    const repo = selectedRepo;
+    if (!repo) return;
+    if (!confirm("Delete " + repo + " and all its indexed data?")) return;
+    try {
+      await api("/repos/" + repo, { method: "DELETE" });
+      setStatus("Deleted " + repo + ".", "ok");
+      await loadRepos();
+    } catch (e) {
+      setStatus(e.message, "err");
+    }
+  };
+
+  // ---------- Indexing with a live progress bar ----------
+  function showProgress(percent, stage) {
+    $("progress").hidden = false;
+    $("barFill").style.width = percent + "%";
+    $("progressPct").textContent = percent + "%";
+    $("progressStage").textContent = stage;
+  }
+
+  async function waitForJob(jobId) {
+    while (true) {
+      await sleep(1000);
+      let job;
+      try {
+        job = await api("/index-jobs/" + jobId);
+      } catch (e) {
+        throw new Error("Lost track of the indexing job. The server may have restarted. Please try again.");
+      }
+      showProgress(job.percent, job.stage);
+      if (job.status === "done") return job.result;
+      if (job.status === "error") throw new Error(job.error);
+    }
+  }
+
+  async function indexRepo() {
+    if ($("indexBtn").disabled) return;
+    const url = $("repoUrl").value.trim();
+    if (!url) { setStatus("Paste a GitHub repository URL first.", "err"); return; }
+    $("indexBtn").disabled = true;
+    $("repoUrl").disabled = true;
+    setStatus("", "");
+    showProgress(0, "Starting...");
+    try {
+      const start = await api("/index-repo", { method: "POST", body: JSON.stringify({ repo_url: url }) });
+      const r = await waitForJob(start.job_id);
+      setStatus("Indexed " + r.repo + ": " + r.total_files + " files, " + r.total_chunks + " chunks.", "ok");
+      $("repoUrl").value = "";
+      await loadRepos(r.repo);
+      await sleep(1000);
+    } catch (e) {
+      setStatus(e.message, "err");
+    } finally {
+      $("progress").hidden = true;
+      $("indexBtn").disabled = false;
+      $("repoUrl").disabled = false;
+    }
+  }
+  // A form makes the Enter key work, including the "Go" key on mobile keyboards
+  $("indexForm").addEventListener("submit", (e) => { e.preventDefault(); indexRepo(); });
+
+  // ---------- Chat ----------
+  function isMobileLayout() { return window.matchMedia("(max-width: 900px)").matches; }
+
+  // True when the user is already near the bottom, so new text should keep scrolling along
+  function shouldStick() {
+    if (isMobileLayout()) return window.innerHeight + window.scrollY >= document.body.scrollHeight - 160;
+    const c = $("chat");
+    return c.scrollHeight - c.scrollTop - c.clientHeight < 140;
+  }
+  function scrollChat() {
+    if (isMobileLayout()) window.scrollTo({ top: document.body.scrollHeight });
+    else $("chat").scrollTop = $("chat").scrollHeight;
+  }
+
+  function addUserMessage(text) {
+    const empty = $("emptyState");
+    if (empty) empty.remove();
+    const div = document.createElement("div");
+    div.className = "msg user";
+    div.textContent = text;
+    $("chat").appendChild(div);
+  }
+
+  function addBotMessage() {
+    const div = document.createElement("div");
+    div.className = "msg bot";
+    div.innerHTML = '<div class="msg-head"><span class="avatar">' + svg("code") + "</span><span>CodeLens</span></div>" +
+      '<div class="answer"><span class="typing"><i></i><i></i><i></i></span></div>' +
+      '<div class="sources" hidden></div><div class="msg-actions" hidden></div>';
+    $("chat").appendChild(div);
+    return div;
+  }
+
+  function buildSources(repo, sources, msgId) {
+    return '<div class="sources-title">Sources</div>' + sources.map((s) => {
+      const [start, end] = s.lines.split("-");
+      const ghUrl = "https://github.com/" + repo + "/blob/HEAD/" + s.file_path + "#L" + start + "-L" + end;
+      return '<details class="src" id="src-' + msgId + "-" + s.ref + '">' +
+        '<summary><span class="badge">' + s.ref + "</span> <code>" + esc(s.file_path) + "</code> " +
+        "<span>Lines " + esc(s.lines) + '</span><span class="sim">' + Math.round(s.similarity * 100) + "% match</span></summary>" +
+        "<pre><code>" + esc(s.preview) + "...</code></pre>" +
+        '<a class="gh" href="' + esc(ghUrl) + '" target="_blank" rel="noopener">Open on GitHub &rarr;</a>' +
+        "</details>";
+    }).join("");
+  }
+
+  function setStreaming(on) {
+    streaming = on;
+    $("sendIcon").innerHTML = svg(on ? "stop" : "send");
+    $("sendBtn").setAttribute("aria-label", on ? "Stop" : "Send");
+    $("sendBtn").title = on ? "Stop (Esc)" : "Send (Enter)";
+    updateControls();
+  }
+
+  // Reads the NDJSON stream line by line and hands each event to onEvent
+  async function streamAsk(payload, signal, onEvent) {
+    const res = await fetch("/ask", {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload), signal,
+    });
+    if (!res.ok) throw await readError(res);
+    const reader = res.body.getReader();
+    const decoder = new TextDecoder();
+    let buffer = "";
+    while (true) {
+      const { value, done } = await reader.read();
+      if (done) break;
+      buffer += decoder.decode(value, { stream: true });
+      let idx;
+      while ((idx = buffer.indexOf("\n")) >= 0) {
+        const line = buffer.slice(0, idx).trim();
+        buffer = buffer.slice(idx + 1);
+        if (line) onEvent(JSON.parse(line));
+      }
+    }
+    if (buffer.trim()) onEvent(JSON.parse(buffer.trim()));
+  }
+
+  async function ask(question) {
+    if (streaming) return;
+    const repo = selectedRepo;
+    setStreaming(true);
+    addUserMessage(question);
+    const msgId = ++msgCounter;
+    const msgEl = addBotMessage();
+    scrollChat();
+
+    const answerEl = msgEl.querySelector(".answer");
+    const sourcesEl = msgEl.querySelector(".sources");
+    const actionsEl = msgEl.querySelector(".msg-actions");
+    let raw = "";
+    let scheduled = false;
+    let finished = false;
+    abortCtl = new AbortController();
+
+    // Re-render at most once per animation frame while text streams in
+    const render = () => {
+      scheduled = false;
+      const stick = shouldStick();
+      answerEl.innerHTML = renderMarkdown(raw, msgId);
+      if (stick) scrollChat();
+    };
+
+    try {
+      await streamAsk(
+        { repo, question, top_k: 5, history: chatHistory.slice(-6) },
+        abortCtl.signal,
+        (ev) => {
+          if (ev.type === "sources") {
+            if (ev.sources.length) {
+              sourcesEl.innerHTML = buildSources(repo, ev.sources, msgId);
+              sourcesEl.hidden = false;
+            }
+          } else if (ev.type === "token") {
+            raw += ev.text;
+            if (!scheduled) { scheduled = true; requestAnimationFrame(render); }
+          } else if (ev.type === "error") {
+            throw new Error(ev.message);
+          }
+        }
+      );
+      finished = true;
+    } catch (e) {
+      if (e.name === "AbortError") {
+        raw += (raw ? "\n\n" : "") + "_Stopped._";
+      } else {
+        answerEl.innerHTML = '<span style="color:var(--err)">' + esc(e.message) + "</span>";
+        raw = "";
+      }
+    } finally {
+      abortCtl = null;
+      if (raw) {
+        answerEl.innerHTML = renderMarkdown(raw, msgId);
+        answers[msgId] = raw;
+        actionsEl.innerHTML = '<button type="button" class="btn-ghost btn-sm copy-answer" data-msg="' + msgId + '">' + svg("copy") + "<span>Copy answer</span></button>";
+        actionsEl.hidden = false;
+      }
+      if (finished && raw && repo === selectedRepo) {
+        chatHistory.push({ role: "user", content: question }, { role: "assistant", content: raw });
+        chatHistory = chatHistory.slice(-12);
+      }
+      setStreaming(false);
+      scrollChat();
+      if (window.matchMedia("(pointer: fine)").matches) $("question").focus();
+    }
+  }
+
+  function stopStreaming() { if (abortCtl) abortCtl.abort(); }
+
+  function newChat() {
+    stopStreaming();
+    chatHistory = [];
+    answers = {};
+    $("chat").innerHTML = '<div class="empty" id="emptyState">New chat started. Ask a question or tap a suggestion.</div>';
+  }
+  $("newChatBtn").onclick = newChat;
+
+  $("askForm").addEventListener("submit", (e) => {
+    e.preventDefault();
+    if (streaming) { stopStreaming(); return; }   // the send button turns into Stop while streaming
+    const q = $("question").value.trim();
+    if (!q) return;
+    $("question").value = "";
+    ask(q);
+  });
+
+  // Clicks inside the chat: citations, copy code, copy answer
+  $("chat").addEventListener("click", async (e) => {
+    const cite = e.target.closest("a.cite");
+    if (cite) {
+      e.preventDefault();
+      const target = document.getElementById("src-" + cite.dataset.msg + "-" + cite.dataset.ref);
+      if (!target) return;
+      target.open = true;
+      target.scrollIntoView({ behavior: "smooth", block: "nearest" });
+      target.classList.remove("flash");
+      void target.offsetWidth; // restarts the animation
+      target.classList.add("flash");
+      return;
+    }
+    const copyBtn = e.target.closest(".copy-code, .copy-answer");
+    if (!copyBtn) return;
+    const text = copyBtn.classList.contains("copy-code")
+      ? copyBtn.closest(".codeblock").querySelector("code").textContent
+      : answers[copyBtn.dataset.msg] || "";
+    const original = copyBtn.innerHTML;
+    const ok = await copyText(text);
+    copyBtn.innerHTML = svg(ok ? "check" : "copy") + "<span>" + (ok ? "Copied" : "Failed") + "</span>";
+    setTimeout(() => { copyBtn.innerHTML = original; }, 1600);
+  });
+
+  // ---------- Suggestions ----------
+  SUGGESTIONS.forEach((q) => {
+    const chip = document.createElement("button");
+    chip.type = "button";
+    chip.className = "chip";
+    chip.textContent = q;
+    chip.onclick = () => ask(q);
+    chip.addEventListener("focus", () => { lastChip = chip; });
+    $("chips").appendChild(chip);
+  });
+
+  // ---------- Keyboard navigation ----------
+  const usable = (el) => el && !el.disabled && el.offsetParent !== null;
+  function focusSlots() {
+    const chips = [...document.querySelectorAll(".chip")].filter(usable);
+    const chipTarget = usable(lastChip) ? lastChip : chips[0];
+    return [
+      { el: $("repoUrl") }, { el: $("repoBtn") },
+      { el: chipTarget, chips: true }, { el: $("question") },
+    ].filter((s) => usable(s.el));
+  }
+  function moveFocus(dir, current) {
+    const slots = focusSlots();
+    if (!slots.length) return;
+    const onChip = current && current.classList && current.classList.contains("chip");
+    let idx = slots.findIndex((s) => (onChip ? s.chips : s.el === current));
+    idx = idx === -1 ? (dir > 0 ? 0 : slots.length - 1) : (idx + dir + slots.length) % slots.length;
+    slots[idx].el.focus();
+  }
+  const isTyping = (el) => el && (el.tagName === "INPUT" || el.tagName === "TEXTAREA");
+
+  document.addEventListener("keydown", (e) => {
+    if (ddOpen && handleDropdownKey(e)) return;
+    const t = e.target;
+    if (e.key === "Escape") {
+      if (streaming) { stopStreaming(); e.preventDefault(); }
+      else if (isTyping(t)) t.blur();
+      return;
+    }
+    if (e.altKey && !e.ctrlKey && !e.metaKey) {
+      const k = e.key.toLowerCase();
+      if (k === "n") { e.preventDefault(); newChat(); return; }
+      if (k === "t") { e.preventDefault(); toggleTheme(); return; }
+    }
+    if (e.key === "/" && !isTyping(t) && !e.ctrlKey && !e.metaKey && !e.altKey) {
+      if (usable($("question"))) { e.preventDefault(); $("question").focus(); }
+      return;
+    }
+    const vertical = e.key === "ArrowDown" || e.key === "ArrowUp";
+    const onChip = t.classList && t.classList.contains("chip");
+    if (vertical && (isTyping(t) || onChip || t.id === "repoBtn")) {
+      e.preventDefault();
+      moveFocus(e.key === "ArrowDown" ? 1 : -1, t);
+      return;
+    }
+    if (onChip && (e.key === "ArrowRight" || e.key === "ArrowLeft")) {
+      e.preventDefault();
+      const chips = [...document.querySelectorAll(".chip")].filter(usable);
+      const i = chips.indexOf(t);
+      chips[(i + (e.key === "ArrowRight" ? 1 : -1) + chips.length) % chips.length].focus();
+    }
+  });
+
+  // ---------- Start ----------
+  setStreaming(false);
+  loadRepos().catch((e) => setStatus(e.message, "err"));
+</script>docker compose up -d
+</body>
+</html>
