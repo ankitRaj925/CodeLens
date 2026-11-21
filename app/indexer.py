@@ -7,13 +7,13 @@ from git.exc import GitCommandError
 from google.genai import errors as genai_errors
 
 from app.chunker import chunk_repo
-from app.db import replace_repo_chunks
+from app.db import save_indexed_repo
 from app.embedder import embed_texts, gemini_error_message
 from app.loader import clone_repo, list_code_files, parse_github_url
 
 logger = logging.getLogger(__name__)
 
-# Safety limit so one huge repo cannot use up the free API quota
+# Size limit for the admin. Visitors get a smaller limit from the settings.
 MAX_CHUNKS = 1500
 
 # How many finished jobs we keep in memory
@@ -28,7 +28,7 @@ class JobError(Exception):
     """A problem with the user's repo that should be shown as a normal message."""
 
 
-def create_job(repo_url: str, folder: str) -> str:
+def create_job(repo_url: str, folder: str, owner_key: str) -> str:
     """Registers a new indexing job and returns its id."""
     job_id = uuid.uuid4().hex[:12]
     with _lock:
@@ -42,6 +42,7 @@ def create_job(repo_url: str, folder: str) -> str:
             "job_id": job_id,
             "repo_url": repo_url,
             "folder": folder,
+            "owner": owner_key,
             "status": "running",  # running | done | error
             "stage": "Starting",
             "percent": 0,
@@ -69,7 +70,15 @@ def _update(job_id: str, **fields) -> None:
         JOBS[job_id].update(fields)
 
 
-def run_index_job(job_id: str, repo_url: str, folder: str) -> None:
+def run_index_job(
+    job_id: str,
+    repo_url: str,
+    folder: str,
+    owner_key: str,
+    ttl_hours: int | None,
+    max_chunks: int,
+    make_example: bool,
+) -> None:
     """Clones, chunks, embeds and saves a repo while reporting progress."""
     try:
         _update(job_id, stage="Cloning repository", percent=3)
@@ -83,10 +92,11 @@ def run_index_job(job_id: str, repo_url: str, folder: str) -> None:
 
         if not chunks:
             raise JobError("No supported code files found.")
-        if len(chunks) > MAX_CHUNKS:
+        if len(chunks) > max_chunks:
+            # Only the admin can index a single folder
+            hint = " or index only one folder (for example: src)" if ttl_hours is None else ""
             raise JobError(
-                f"Repo is too large ({len(chunks)} chunks, limit {MAX_CHUNKS}). "
-                "Try a smaller repo, or index only one folder (for example: src)."
+                f"Repo is too large ({len(chunks)} chunks, limit {max_chunks}). Try a smaller repo{hint}."
             )
 
         # Adding the file path to the text helps the embedding capture where the code lives
@@ -105,7 +115,7 @@ def run_index_job(job_id: str, repo_url: str, folder: str) -> None:
 
         _update(job_id, stage="Saving to database", percent=97)
         # Old data is replaced only after embeddings succeeded, so a failure loses nothing
-        replace_repo_chunks(repo_id, chunks, embeddings)
+        save_indexed_repo(repo_id, chunks, embeddings, owner_key, ttl_hours, make_example)
 
         _update(
             job_id,
@@ -126,7 +136,7 @@ def run_index_job(job_id: str, repo_url: str, folder: str) -> None:
             job_id,
             status="error",
             stage="Failed",
-            error="Could not clone the repo. Check that it exists and is public.",
+            error="Cannot clone this repository. Only public repositories are supported.",
         )
     except JobError as e:
         _update(job_id, status="error", stage="Failed", error=str(e))

@@ -1,15 +1,15 @@
 services:
   db:
-    image: pgvector/pgvector:pg16
+    image: pgvector/pgvector:pg16   # PostgreSQL 16 with the pgvector extension preinstalled
     environment:
       POSTGRES_USER: ${POSTGRES_USER}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
       POSTGRES_DB: ${POSTGRES_DB}
     ports:
-      - "5433:5432"   # laptop par 5433, taaki local postgres se na takraye
+      - "5433:5432"   # host port 5433 avoids a clash with any local Postgres on 5432
     volumes:
-      - pgdata:/var/lib/postgresql/data
-      - ./db/init.sql:/docker-entrypoint-initdb.d/init.sql
+      - pgdata:/var/lib/postgresql/data                         # persist data across restarts
+      - ./db/init.sql:/docker-entrypoint-initdb.d/init.sql      # runs once on first DB creation
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER} -d ${POSTGRES_DB}"]
       interval: 5s
@@ -18,16 +18,20 @@ services:
 
   app:
     build: .
+    # Local development only: --reload restarts the server when code changes
+    command: uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
     ports:
       - "8000:8000"
     environment:
       DATABASE_URL: postgresql+psycopg://${POSTGRES_USER}:${POSTGRES_PASSWORD}@db:5432/${POSTGRES_DB}
       GOOGLE_API_KEY: ${GOOGLE_API_KEY}
+      ADMIN_PASSWORD: ${ADMIN_PASSWORD:-}
+      SECRET_KEY: ${SECRET_KEY:-}
     volumes:
-      - ./app:/code/app   # code badlo to auto reload hoga
+      - ./app:/code/app   # mount source code so edits trigger auto-reload
     depends_on:
       db:
-        condition: service_healthy
+        condition: service_healthy   # start the app only after the DB is ready
 
 volumes:
   pgdata:

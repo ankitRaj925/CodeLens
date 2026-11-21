@@ -18,9 +18,11 @@
     --text: #0b1220; --muted: #475569; --border: #d0d5dd;
     --accent: #2563eb; --accent-hover: #1d4ed8; --link: #2563eb; --accent-soft: rgba(37, 99, 235, 0.1);
     --code: #f1f5f9; --user: #2563eb;
-    --danger: #dc2626; --danger-hover: #b91c1c; --err: #b91c1c; --ok: #15803d;
+    --danger: #dc2626; --danger-hover: #b91c1c; --err: #b91c1c;
+    --ok: #15803d; --ok-text: #14532d; --ok-bg: #dcfce7; --ok-border: #4ade80;
+    --err-text: #991b1b; --err-bg: #fee2e2; --err-border: #f87171;
     --ring: rgba(37, 99, 235, 0.28); --shadow: rgba(15, 23, 42, 0.16);
-    --topbar: 60px; --h: 44px;
+    --topbar: 60px; --h: 44px; --side-w: 380px;
   }
   /* Dark theme: follows the system unless the user picked light */
   @media (prefers-color-scheme: dark) {
@@ -30,7 +32,9 @@
       --text: #e6edf3; --muted: #9ba7b4; --border: #30363d;
       --accent: #1f6feb; --accent-hover: #388bfd; --link: #58a6ff; --accent-soft: rgba(88, 166, 255, 0.16);
       --code: #0d1117; --user: #1f6feb;
-      --danger: #da3633; --danger-hover: #f85149; --err: #ff7b72; --ok: #3fb950;
+      --danger: #da3633; --danger-hover: #f85149; --err: #ff7b72;
+      --ok: #3fb950; --ok-text: #7ee787; --ok-bg: rgba(63, 185, 80, 0.15); --ok-border: rgba(63, 185, 80, 0.55);
+      --err-text: #ffa198; --err-bg: rgba(248, 81, 73, 0.15); --err-border: rgba(248, 81, 73, 0.55);
       --ring: rgba(56, 139, 253, 0.4); --shadow: rgba(1, 4, 9, 0.6);
     }
   }
@@ -41,7 +45,9 @@
     --text: #e6edf3; --muted: #9ba7b4; --border: #30363d;
     --accent: #1f6feb; --accent-hover: #388bfd; --link: #58a6ff; --accent-soft: rgba(88, 166, 255, 0.16);
     --code: #0d1117; --user: #1f6feb;
-    --danger: #da3633; --danger-hover: #f85149; --err: #ff7b72; --ok: #3fb950;
+    --danger: #da3633; --danger-hover: #f85149; --err: #ff7b72;
+    --ok: #3fb950; --ok-text: #7ee787; --ok-bg: rgba(63, 185, 80, 0.15); --ok-border: rgba(63, 185, 80, 0.55);
+    --err-text: #ffa198; --err-bg: rgba(248, 81, 73, 0.15); --err-border: rgba(248, 81, 73, 0.55);
     --ring: rgba(56, 139, 253, 0.4); --shadow: rgba(1, 4, 9, 0.6);
   }
 
@@ -52,6 +58,7 @@
     background: var(--bg); color: var(--text);
     font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; line-height: 1.5;
   }
+  body.resizing { user-select: none; cursor: col-resize; }
   .ico { width: 18px; height: 18px; flex-shrink: 0; }
   a { color: var(--link); }
   ::placeholder { color: var(--muted); opacity: 0.85; }
@@ -66,7 +73,7 @@
   button:hover:not(:disabled) { transform: translateY(-2px); }
   button:active:not(:disabled) { transform: translateY(0) scale(0.97); }
   button:disabled { opacity: 0.5; cursor: not-allowed; }
-  button:focus-visible, input:focus-visible, summary:focus-visible {
+  button:focus-visible, input:focus-visible, summary:focus-visible, .resizer:focus-visible {
     outline: 2px solid var(--accent); outline-offset: 2px;
   }
   .btn-primary { color: #fff; background: var(--accent); }
@@ -91,20 +98,45 @@
   .brand-text { display: flex; flex-direction: column; line-height: 1.15; }
   h1 { margin: 0; font-size: 20px; letter-spacing: -0.2px; color: var(--text); }
   .tagline { margin: 0; font-size: 12px; color: var(--muted); }
-
-  /* ---------- Layout ---------- */
-  .layout {
-    flex: 1; width: 100%; max-width: 1600px; margin: 0 auto;
-    padding: 16px clamp(12px, 3vw, 32px);
-    display: grid; grid-template-columns: minmax(320px, 400px) minmax(0, 1fr);
-    gap: 16px; align-items: start;
+  .topbar-actions { display: flex; align-items: center; gap: 8px; }
+  .top-btn { height: 40px; padding: 0 14px; }
+  .admin-badge {
+    display: inline-flex; align-items: center; gap: 6px;
+    font-size: 12px; font-weight: 700; color: var(--ok-text); background: var(--ok-bg);
+    border: 1px solid var(--ok-border); border-radius: 12px; padding: 3px 10px;
   }
-  .side { display: flex; flex-direction: column; gap: 16px; min-width: 0; }
+  .admin-badge .ico { width: 14px; height: 14px; }
+
+  /* ---------- Layout: sidebar | drag handle | chat ---------- */
+  .layout {
+    flex: 1; width: 100%; max-width: 1800px; margin: 0 auto;
+    padding: 16px clamp(12px, 3vw, 32px);
+    display: grid; grid-template-columns: var(--side-w) 16px minmax(0, 1fr);
+    gap: 0; align-items: start;
+  }
+  .side {
+    display: flex; flex-direction: column; gap: 16px; min-width: 0;
+    height: calc(100dvh - var(--topbar) - 32px); overflow-y: auto;
+    position: sticky; top: calc(var(--topbar) + 16px); padding: 2px;
+  }
+  .side > .card { flex-shrink: 0; }
+  .side > .history { flex: 1 0 260px; display: flex; flex-direction: column; min-height: 260px; }
   .chatpanel {
     display: flex; flex-direction: column; min-height: 0; min-width: 0;
     height: calc(100dvh - var(--topbar) - 32px);
     position: sticky; top: calc(var(--topbar) + 16px);
   }
+  .resizer {
+    position: sticky; top: calc(var(--topbar) + 16px); height: calc(100dvh - var(--topbar) - 32px);
+    cursor: col-resize; touch-action: none;
+  }
+  .resizer::after {
+    content: ""; position: absolute; left: 50%; top: 50%; width: 4px; height: 36px;
+    transform: translate(-50%, -50%); border-radius: 2px; background: var(--border);
+    transition: background 0.18s ease, height 0.18s ease;
+  }
+  .resizer:hover::after, .resizer.dragging::after, .resizer:focus-visible::after { background: var(--accent); height: 64px; }
+
   .card { background: var(--card); border: 1px solid var(--border); border-radius: 14px; padding: 16px; }
   .card h2, .card-head h2 { margin: 0 0 12px; font-size: 12px; font-weight: 700; color: var(--muted); text-transform: uppercase; letter-spacing: 0.8px; }
   .card-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-bottom: 8px; }
@@ -113,22 +145,36 @@
   .row { display: flex; gap: 8px; align-items: center; }
   .muted { color: var(--muted); font-size: 13px; }
 
-  input[type=text] {
+  input[type=text], input[type=password] {
     flex: 1; min-width: 0; width: 100%; height: var(--h); padding: 0 14px; font-size: 15px; font-family: inherit;
     border: 1px solid var(--border); border-radius: 10px; background: var(--surface); color: var(--text);
     transition: border-color 0.18s ease, box-shadow 0.18s ease;
   }
-  input[type=text]:focus { outline: none; border-color: var(--accent); box-shadow: 0 0 0 3px var(--ring); }
+  input[type=text]:focus, input[type=password]:focus { outline: none; border-color: var(--accent); box-shadow: 0 0 0 3px var(--ring); }
   input:disabled { opacity: 0.6; cursor: not-allowed; }
 
-  .status { margin-top: 10px; font-size: 14px; min-height: 20px; overflow-wrap: anywhere; }
-  .status.ok { color: var(--ok); }
-  .status.err { color: var(--err); }
+  /* Success and error messages are clear boxes, readable in both themes */
+  .status {
+    margin-top: 10px; font-size: 14px; font-weight: 600; overflow-wrap: anywhere;
+    padding: 9px 12px; border-radius: 10px; border: 1px solid transparent;
+  }
+  .status:empty { display: none; }
+  .status.ok { color: var(--ok-text); background: var(--ok-bg); border-color: var(--ok-border); }
+  .status.err { color: var(--err-text); background: var(--err-bg); border-color: var(--err-border); }
 
   .progress { margin-top: 12px; }
   .progress-top { display: flex; justify-content: space-between; gap: 8px; font-size: 13px; color: var(--muted); margin-bottom: 6px; }
   .bar { height: 8px; border-radius: 4px; background: var(--surface); border: 1px solid var(--border); overflow: hidden; }
   .bar-fill { height: 100%; width: 0; background: var(--accent); transition: width 0.4s ease; }
+
+  /* Visitor slots: how many repositories are left */
+  .slots { margin-top: 12px; padding: 10px 12px; border: 1px solid var(--border); border-radius: 10px; background: var(--surface); }
+  .slots-top { display: flex; align-items: center; justify-content: space-between; gap: 10px; font-size: 14px; font-weight: 600; }
+  .slots.full .slots-top > span:first-child { color: var(--err-text); }
+  .slot-dots { display: flex; gap: 6px; flex-shrink: 0; }
+  .slot-dot { width: 12px; height: 12px; border-radius: 50%; border: 2px solid var(--accent); transition: background 0.25s ease; }
+  .slot-dot.used { background: var(--accent); }
+  .slots .note { margin: 6px 0 0; }
 
   /* ---------- Indexed files box ---------- */
   details.files { margin-top: 12px; border: 1px solid var(--border); border-radius: 10px; background: var(--surface); }
@@ -157,16 +203,66 @@
   .dd.open .dd-caret { transform: rotate(180deg); }
   .dd-list {
     position: absolute; z-index: 30; left: 0; right: 0; top: calc(100% + 6px); margin: 0; padding: 6px;
-    list-style: none; max-height: 260px; overflow-y: auto; background: var(--card);
+    list-style: none; max-height: 300px; overflow-y: auto; background: var(--card);
     border: 1px solid var(--border); border-radius: 12px; box-shadow: 0 14px 34px var(--shadow);
     animation: pop 0.14s ease;
   }
   @keyframes pop { from { opacity: 0; transform: translateY(-4px); } to { opacity: 1; transform: none; } }
-  .dd-item { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 9px 12px; border-radius: 8px; cursor: pointer; font-size: 14px; }
+  .dd-item { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 7px 8px 7px 12px; border-radius: 8px; cursor: pointer; font-size: 14px; min-height: 40px; }
   .dd-item.active { background: var(--accent-soft); }
   .dd-item.selected .dd-name { color: var(--link); font-weight: 600; }
   .dd-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-  .dd-meta { color: var(--muted); font-size: 12px; flex-shrink: 0; }
+  .dd-meta { display: flex; align-items: center; gap: 8px; color: var(--muted); font-size: 12px; flex-shrink: 0; }
+  .tag { font-size: 11px; font-weight: 700; padding: 1px 8px; border-radius: 10px; border: 1px solid var(--border); color: var(--muted); white-space: nowrap; }
+  .tag-ex { color: var(--link); border-color: var(--link); background: var(--accent-soft); }
+  .tag-you { color: var(--ok-text); border-color: var(--ok-border); background: var(--ok-bg); }
+
+  /* Admin visibility toggle: open eye = visitors can see it, crossed eye = admin only */
+  button.dd-toggle {
+    width: 30px; height: 30px; padding: 0; border-radius: 8px; flex-shrink: 0;
+    background: transparent; color: var(--muted); border: 1px solid var(--border);
+  }
+  button.dd-toggle .ico { width: 16px; height: 16px; }
+  button.dd-toggle.on { color: var(--link); border-color: var(--link); background: var(--accent-soft); }
+  button.dd-toggle:hover:not(:disabled) { transform: none; border-color: var(--accent); color: var(--link); }
+  button.dd-toggle:active:not(:disabled) { transform: scale(0.92); }
+  .dd-legend { display: flex; flex-wrap: wrap; gap: 4px 14px; padding: 8px 12px 4px; margin-top: 4px; border-top: 1px solid var(--border); font-size: 12px; color: var(--muted); cursor: default; }
+  .dd-legend span { display: inline-flex; align-items: center; gap: 5px; }
+  .dd-legend .ico { width: 14px; height: 14px; }
+
+  /* ---------- Chat history ---------- */
+  .history-list { list-style: none; margin: 0; padding: 0; overflow-y: auto; flex: 1; display: flex; flex-direction: column; gap: 4px; }
+  .history-empty { color: var(--muted); font-size: 13px; padding: 14px 4px; text-align: center; }
+  .h-item { display: flex; align-items: center; border-radius: 10px; border: 1px solid transparent; transition: background 0.18s ease, border-color 0.18s ease; }
+  .h-item:hover { background: var(--accent-soft); }
+  .h-item.active { background: var(--accent-soft); border-color: var(--accent); }
+  button.h-open {
+    flex: 1; min-width: 0; flex-direction: column; align-items: flex-start; justify-content: flex-start; gap: 0;
+    text-align: left; background: transparent; color: var(--text); font-weight: 500; padding: 8px 10px; border-radius: 10px;
+  }
+  button.h-open:hover:not(:disabled), button.h-open:active:not(:disabled) { transform: none; }
+  .h-title, .h-sub { max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .h-title { font-size: 14px; }
+  .h-sub { font-size: 12px; color: var(--muted); font-weight: 400; }
+  button.h-del {
+    width: 28px; height: 28px; padding: 0; margin-right: 6px; flex-shrink: 0; border-radius: 8px;
+    background: transparent; color: var(--muted); opacity: 0;
+  }
+  button.h-del .ico { width: 15px; height: 15px; }
+  .h-item:hover .h-del, .h-item:focus-within .h-del, .h-item.active .h-del { opacity: 1; }
+  @media (hover: none) { button.h-del { opacity: 1; } }
+  button.h-del:hover:not(:disabled) { color: var(--danger); background: var(--card); transform: none; }
+
+  /* ---------- Login dialog ---------- */
+  dialog {
+    width: min(380px, calc(100vw - 32px)); padding: 20px; border: 1px solid var(--border);
+    border-radius: 14px; background: var(--card); color: var(--text);
+  }
+  dialog::backdrop { background: rgba(0, 0, 0, 0.55); }
+  dialog h3 { margin: 0 0 6px; font-size: 17px; }
+  dialog p { margin: 0 0 14px; font-size: 13px; color: var(--muted); }
+  dialog .row { justify-content: flex-end; margin-top: 14px; }
+  .form-error { min-height: 20px; margin-top: 8px; font-size: 13px; font-weight: 600; color: var(--err-text); }
 
   /* ---------- Chat ---------- */
   #chat { flex: 1; overflow-y: auto; display: flex; flex-direction: column; gap: 14px; padding: 4px 4px 4px 0; min-height: 160px; }
@@ -217,7 +313,7 @@
   details.src summary { cursor: pointer; padding: 8px 10px; font-size: 13px; display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
   details.src pre { margin: 0; padding: 10px; background: var(--code); overflow-x: auto; font-size: 12px; border-top: 1px solid var(--border); }
   .badge { background: var(--accent); color: #fff; font-size: 11px; font-weight: 700; border-radius: 9px; padding: 0 7px; }
-  .sim { color: var(--ok); font-size: 12px; font-weight: 700; margin-left: auto; }
+  .sim { color: var(--ok-text); font-size: 12px; font-weight: 700; margin-left: auto; }
   .gh { font-size: 12px; text-decoration: none; padding: 6px 10px 8px; display: inline-block; }
   .flash { animation: flash 1.2s ease; }
   @keyframes flash { 0%, 60% { box-shadow: 0 0 0 3px var(--accent); } 100% { box-shadow: 0 0 0 0 transparent; } }
@@ -238,7 +334,11 @@
 
   /* ---------- Tablets and phones ---------- */
   @media (max-width: 900px) {
-    .layout { grid-template-columns: 1fr; }
+    .layout { grid-template-columns: 1fr; gap: 16px; }
+    .resizer { display: none; }
+    .side { height: auto; overflow: visible; position: static; padding: 0; }
+    .side > .history { flex: none; min-height: 0; }
+    .history-list { max-height: 260px; flex: none; }
     .chatpanel { height: auto; min-height: 70dvh; position: static; }
     #chat { overflow: visible; }
     .composer-wrap {
@@ -251,6 +351,7 @@
     .card { padding: 12px; }
     .tagline { display: none; }
     .label-hide { display: none; }
+    .top-btn { padding: 0 10px; }
   }
   @media (prefers-reduced-motion: reduce) {
     *, *::before, *::after { animation-duration: 0.01ms !important; transition-duration: 0.01ms !important; }
@@ -266,11 +367,16 @@
         <p class="tagline">Ask questions about any public GitHub repository</p>
       </div>
     </div>
-    <button type="button" class="btn-ghost icon-btn" id="themeBtn" aria-label="Toggle dark and light theme"></button>
+    <div class="topbar-actions">
+      <span class="admin-badge" id="adminBadge" hidden><span data-icon="user"></span>Admin</span>
+      <button type="button" class="btn-ghost top-btn" id="loginBtn" hidden><span data-icon="lock"></span><span class="label-hide">Admin login</span></button>
+      <button type="button" class="btn-ghost top-btn" id="logoutBtn" hidden><span data-icon="logout"></span><span class="label-hide">Logout</span></button>
+      <button type="button" class="btn-ghost icon-btn" id="themeBtn" aria-label="Toggle dark and light theme"></button>
+    </div>
   </header>
 
-  <main class="layout">
-    <div class="side">
+  <main class="layout" id="layout">
+    <aside class="side" id="side">
       <section class="card">
         <h2>Index a repository</h2>
         <form id="indexForm" autocomplete="off">
@@ -284,6 +390,7 @@
           <div class="bar"><div class="bar-fill" id="barFill"></div></div>
         </div>
         <div class="status" id="status" role="status"></div>
+        <p class="note" id="slotsText" hidden></p>
         <p class="note">Public repositories only. The docs and tests folders are skipped.</p>
       </section>
 
@@ -291,8 +398,8 @@
         <h2>Repository</h2>
         <div class="row">
           <div class="dd" id="repoDd">
-            <button type="button" class="dd-btn" id="repoBtn" aria-haspopup="listbox" aria-expanded="false" aria-controls="repoList" aria-label="Indexed repositories">
-              <span class="dd-label" id="repoLabel">No repository indexed yet</span>
+            <button type="button" class="dd-btn" id="repoBtn" aria-haspopup="listbox" aria-expanded="false" aria-controls="repoList" aria-label="Available repositories">
+              <span class="dd-label" id="repoLabel">No repository available yet</span>
               <span class="dd-caret" data-icon="chevron"></span>
             </button>
             <ul class="dd-list" id="repoList" role="listbox" hidden></ul>
@@ -304,14 +411,25 @@
           <pre id="fileTree">No repository selected.</pre>
         </details>
       </section>
-    </div>
+
+      <section class="card history">
+        <div class="card-head">
+          <h2>Chat history</h2>
+          <button type="button" class="btn-ghost btn-sm" id="newChatBtn" title="New chat (Alt+N)"><span data-icon="plus"></span>New chat</button>
+        </div>
+        <ul class="history-list" id="historyList"></ul>
+      </section>
+    </aside>
+
+    <div class="resizer" id="resizer" role="separator" aria-orientation="vertical" aria-label="Resize the sidebar"
+         tabindex="0" title="Drag to resize. Double-click to reset."></div>
 
     <section class="card chatpanel">
       <div class="card-head">
         <h2>Chat</h2>
-        <button type="button" class="btn-ghost btn-sm" id="newChatBtn" title="New chat (Alt+N)"><span data-icon="plus"></span>New chat</button>
+        <span class="muted" id="chatRepo"></span>
       </div>
-      <div id="chat"><div class="empty" id="emptyState">Index or select a repository, then ask a question or tap a suggestion. Follow-up questions remember the last few messages.</div></div>
+      <div id="chat"><div class="empty" id="emptyState">Select a repository, then ask a question or tap a suggestion. Follow-up questions remember the last few messages.</div></div>
       <div class="composer-wrap">
         <div class="chips" id="chips"></div>
         <form class="composer" id="askForm" autocomplete="off">
@@ -322,6 +440,19 @@
     </section>
   </main>
 
+  <dialog id="loginDlg">
+    <form id="loginForm" autocomplete="off">
+      <h3>Admin login</h3>
+      <p>Enter the admin password to manage the example repositories.</p>
+      <input type="password" id="loginPw" placeholder="Password" aria-label="Admin password">
+      <div class="form-error" id="loginError" role="alert"></div>
+      <div class="row">
+        <button type="button" class="btn-ghost" id="loginCancel">Cancel</button>
+        <button type="submit" class="btn-primary" id="loginSubmit">Log in</button>
+      </div>
+    </form>
+  </dialog>
+
 <script>
   const $ = (id) => document.getElementById(id);
   const SUGGESTIONS = [
@@ -330,6 +461,8 @@
     "What are the main modules and what do they do?",
     "Where is the entry point?",
   ];
+  const MAX_CHATS = 40;
+  const MAX_MESSAGES = 60;
 
   // ---------- Icons ----------
   const ICONS = {
@@ -343,6 +476,11 @@
     check: '<path d="M5 13l4 4L19 7"/>',
     chevron: '<path d="M6 9l6 6 6-6"/>',
     code: '<path d="M8 8l-4 4 4 4M16 8l4 4-4 4M14 5l-4 14"/>',
+    lock: '<rect x="5" y="11" width="14" height="9" rx="2"/><path d="M8 11V8a4 4 0 0 1 8 0v3"/>',
+    logout: '<path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4M16 17l5-5-5-5M21 12H9"/>',
+    user: '<circle cx="12" cy="8" r="4"/><path d="M4 21v-1a6 6 0 0 1 6-6h4a6 6 0 0 1 6 6v1"/>',
+    eye: '<path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/>',
+    eyeoff: '<path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24"/><path d="M1 1l22 22"/>',
   };
   function svg(name) {
     return '<svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" ' +
@@ -355,11 +493,19 @@
   let hasRepo = false;
   let streaming = false;
   let abortCtl = null;
+  let indexing = false;      // true while a repository is being indexed (it already uses one slot)
   let chatHistory = [];      // sent to the server so follow-up questions work
   let answers = {};          // raw answer text per message, used by the Copy button
   let lastChip = null;
-  let repos = [];            // indexed repositories from the server
+  let repos = [];            // repositories this person may see
   let selectedRepo = "";     // "owner/name" of the chosen repository
+  let me = { is_admin: false, admin_login_enabled: false, repos_used: 0, limits: { max_repos: 3, data_hours: 24 } };
+
+  // Chat history (saved in this browser, separately for the admin and for visitors)
+  let chats = [];
+  let loadedChatKey = "";
+  let activeChatId = null;
+  let readOnlyChat = false;  // true when the repository of an opened chat is no longer available
 
   // ---------- Helpers ----------
   // Escapes HTML so text from the server can never inject markup
@@ -382,10 +528,17 @@
     return res.json();
   }
 
-  function setStatus(message, kind) {
+  // Success and error messages disappear by themselves, so they never get stuck on the screen
+  let statusTimer = null;
+  function setStatus(message, kind, ms) {
+    clearTimeout(statusTimer);
     const el = $("status");
     el.className = "status " + (kind || "");
     el.textContent = message;
+    if (message) {
+      const wait = ms || (kind === "ok" ? 3000 : Math.min(8000, Math.max(3000, message.length * 50)));
+      statusTimer = setTimeout(() => { el.textContent = ""; el.className = "status"; }, wait);
+    }
   }
 
   async function copyText(text) {
@@ -398,6 +551,16 @@
       ta.remove();
       return ok;
     }
+  }
+
+  function timeAgo(ts) {
+    const s = (Date.now() - ts) / 1000;
+    if (s < 60) return "just now";
+    const m = Math.floor(s / 60);
+    if (m < 60) return m + "m ago";
+    const h = Math.floor(m / 60);
+    if (h < 24) return h + "h ago";
+    return Math.floor(h / 24) + "d ago";
   }
 
   // ---------- Markdown rendering ----------
@@ -533,12 +696,145 @@
   $("themeBtn").onclick = toggleTheme;
   updateThemeButton();
 
+  // ---------- Resizable sidebar ----------
+  const SIDE_DEFAULT = 380;
+  const SIDE_MIN = 280;
+  const RESIZER_W = 16;
+  let dragging = false;
+
+  function sideMax() { return Math.max(SIDE_MIN, Math.min(720, Math.floor($("layout").clientWidth * 0.6))); }
+  function currentSide() {
+    return parseInt(getComputedStyle(document.documentElement).getPropertyValue("--side-w"), 10) || SIDE_DEFAULT;
+  }
+  function setSideWidth(px, save) {
+    const w = Math.max(SIDE_MIN, Math.min(sideMax(), Math.round(px)));
+    document.documentElement.style.setProperty("--side-w", w + "px");
+    $("resizer").setAttribute("aria-valuenow", w);
+    if (save) { try { localStorage.setItem("codelens-side-width", String(w)); } catch (e) { /* ignore */ } }
+  }
+  $("resizer").addEventListener("pointerdown", (e) => {
+    if (isMobileLayout()) return;
+    dragging = true;
+    $("resizer").setPointerCapture(e.pointerId);
+    $("resizer").classList.add("dragging");
+    document.body.classList.add("resizing");
+    e.preventDefault();
+  });
+  $("resizer").addEventListener("pointermove", (e) => {
+    if (!dragging) return;
+    const lay = $("layout");
+    const left = lay.getBoundingClientRect().left + parseFloat(getComputedStyle(lay).paddingLeft);
+    setSideWidth(e.clientX - left - RESIZER_W / 2, false);
+  });
+  function stopDragging() {
+    if (!dragging) return;
+    dragging = false;
+    $("resizer").classList.remove("dragging");
+    document.body.classList.remove("resizing");
+    setSideWidth(currentSide(), true);
+  }
+  $("resizer").addEventListener("pointerup", stopDragging);
+  $("resizer").addEventListener("pointercancel", stopDragging);
+  $("resizer").addEventListener("dblclick", () => setSideWidth(SIDE_DEFAULT, true));
+  $("resizer").addEventListener("keydown", (e) => {
+    const step = e.shiftKey ? 48 : 16;
+    if (e.key === "ArrowLeft") { e.preventDefault(); setSideWidth(currentSide() - step, true); }
+    else if (e.key === "ArrowRight") { e.preventDefault(); setSideWidth(currentSide() + step, true); }
+    else if (e.key === "Home") { e.preventDefault(); setSideWidth(SIDE_MIN, true); }
+    else if (e.key === "End") { e.preventDefault(); setSideWidth(sideMax(), true); }
+  });
+  window.addEventListener("resize", () => setSideWidth(currentSide(), false));
+  try {
+    const savedWidth = parseInt(localStorage.getItem("codelens-side-width"), 10);
+    if (savedWidth) setSideWidth(savedWidth, false);
+  } catch (e) { /* ignore */ }
+  $("resizer").setAttribute("aria-valuemin", SIDE_MIN);
+
+  // ---------- Who am I (admin or visitor) ----------
+  async function loadMe() {
+    me = await api("/me");
+    renderAuth();
+    // The admin and visitors keep separate chat histories in this browser
+    const key = "codelens-chats:" + (me.is_admin ? "admin" : "visitor");
+    if (key !== loadedChatKey) {
+      loadedChatKey = key;
+      chats = readChats();
+      renderHistory();
+    }
+  }
+
+  function renderAuth() {
+    const loginOn = me.admin_login_enabled;
+    $("loginBtn").hidden = !(loginOn && !me.is_admin);
+    $("logoutBtn").hidden = !(loginOn && me.is_admin);
+    $("adminBadge").hidden = !(loginOn && me.is_admin);
+    updateSlots();
+  }
+
+  // Visitors: how many repositories they can still add. Deleting a repository does not give the slot back.
+  function updateSlots() {
+    const note = $("slotsText");
+    note.hidden = me.is_admin;
+    if (me.is_admin) return;
+    const left = Math.max(0, (me.adds_left || 0) - (indexing ? 1 : 0));
+    note.textContent = left === 0
+      ? "No repositories left to add."
+      : "You can add " + left + " more " + (left === 1 ? "repository" : "repositories") + ".";
+  }
+
+  async function afterAuthChange(message) {
+    selectedRepo = "";
+    newChat();
+    await loadMe();
+    await loadRepos();
+    setStatus(message, "ok", 3000);
+  }
+
+  // Login dialog
+  $("loginBtn").onclick = () => {
+    $("loginError").textContent = "";
+    $("loginPw").value = "";
+    $("loginDlg").showModal();
+    $("loginPw").focus();
+  };
+  $("loginCancel").onclick = () => $("loginDlg").close();
+  $("loginForm").addEventListener("submit", async (e) => {
+    e.preventDefault();
+    $("loginSubmit").disabled = true;
+    try {
+      await api("/admin/login", { method: "POST", body: JSON.stringify({ password: $("loginPw").value }) });
+      $("loginDlg").close();
+      await afterAuthChange("Logged in as admin.");
+    } catch (err) {
+      $("loginError").textContent = err.message;
+      $("loginPw").select();
+    } finally {
+      $("loginSubmit").disabled = false;
+    }
+  });
+  $("logoutBtn").onclick = async () => {
+    try {
+      await api("/admin/logout", { method: "POST" });
+      await afterAuthChange("Logged out.");
+    } catch (err) {
+      setStatus(err.message, "err");
+    }
+  };
+
   // ---------- Repository dropdown (custom, so the open list matches the design) ----------
   let ddOpen = false;
   let ddActive = -1;
 
+  function currentRepo() { return repos.find((r) => r.repo === selectedRepo); }
+
+  // Visitors see a small text tag. The admin gets an eye toggle instead (see renderDropdown).
+  function tagFor(r) {
+    if (r.is_example) return '<span class="tag tag-ex">Example</span>';
+    return '<span class="tag tag-you">Yours</span>';
+  }
+
   function renderDropdown() {
-    $("repoLabel").textContent = selectedRepo || "No repository indexed yet";
+    $("repoLabel").textContent = selectedRepo || "No repository available yet";
     const list = $("repoList");
     list.innerHTML = "";
     repos.forEach((r, i) => {
@@ -548,10 +844,50 @@
       li.dataset.index = i;
       li.setAttribute("role", "option");
       li.setAttribute("aria-selected", r.repo === selectedRepo ? "true" : "false");
-      li.innerHTML = '<span class="dd-name">' + esc(r.repo) + '</span><span class="dd-meta">' + r.total_chunks + " chunks</span>";
+
+      let right;
+      if (me.is_admin) {
+        // Open eye = visible to visitors as an example. Crossed eye = admin only.
+        const label = r.is_example
+          ? "Visible to visitors. Click to make it admin only (key: E)"
+          : "Admin only. Click to show it to visitors (key: E)";
+        right = "<span>" + r.total_chunks + " chunks</span>" +
+          '<button type="button" class="dd-toggle' + (r.is_example ? " on" : "") + '" data-index="' + i + '"' +
+          ' title="' + label + '" aria-label="' + label + '" aria-pressed="' + r.is_example + '">' +
+          svg(r.is_example ? "eye" : "eyeoff") + "</button>";
+      } else {
+        right = tagFor(r) + "<span>" + r.total_chunks + " chunks</span>";
+      }
+      li.innerHTML = '<span class="dd-name">' + esc(r.repo) + '</span><span class="dd-meta">' + right + "</span>";
       list.appendChild(li);
     });
+
+    if (me.is_admin && repos.length) {
+      const legend = document.createElement("li");
+      legend.className = "dd-legend";
+      legend.setAttribute("role", "presentation");
+      legend.innerHTML = "<span>" + svg("eye") + "Visible to visitors</span>" +
+        "<span>" + svg("eyeoff") + "Admin only</span><span>Click the eye or press E</span>";
+      list.appendChild(legend);
+    }
   }
+
+  // Admin: switches a repository between "admin only" and "visible to visitors"
+  async function toggleExample(r) {
+    if (!r || !me.is_admin) return;
+    const want = !r.is_example;
+    try {
+      await api("/repos/" + r.repo, { method: "PATCH", body: JSON.stringify({ is_example: want }) });
+      r.is_example = want;
+      const keep = ddActive;
+      renderDropdown();
+      if (ddOpen) setActive(keep);
+      setStatus(r.repo + (want ? " is now visible to visitors." : " is now admin only."), "ok");
+    } catch (err) {
+      setStatus(err.message, "err");
+    }
+  }
+
   function setActive(i) {
     ddActive = i;
     const items = [...$("repoList").children];
@@ -581,8 +917,8 @@
   function chooseRepo(name) {
     if (name !== selectedRepo) {
       selectedRepo = name;
-      chatHistory = [];          // do not mix the conversation of two repositories
       renderDropdown();
+      newChat();                 // a different repository starts a new conversation
       loadTree();
     }
     closeDropdown(true);
@@ -594,6 +930,11 @@
     if (e.key === "ArrowUp") { e.preventDefault(); setActive((ddActive - 1 + n) % n); return true; }
     if (e.key === "Home") { e.preventDefault(); setActive(0); return true; }
     if (e.key === "End") { e.preventDefault(); setActive(n - 1); return true; }
+    if ((e.key === "e" || e.key === "E") && me.is_admin && !e.ctrlKey && !e.metaKey && !e.altKey) {
+      e.preventDefault();
+      toggleExample(repos[ddActive]);
+      return true;
+    }
     if (e.key === "Enter" || e.key === " ") { e.preventDefault(); chooseRepo(repos[ddActive].repo); return true; }
     if (e.key === "Escape") { e.preventDefault(); closeDropdown(true); return true; }
     if (e.key === "Tab") closeDropdown(false);
@@ -602,6 +943,13 @@
   $("repoBtn").addEventListener("click", () => (ddOpen ? closeDropdown(false) : openDropdown()));
   $("repoBtn").addEventListener("keyup", (e) => { if (e.key === " ") e.preventDefault(); });
   $("repoList").addEventListener("click", (e) => {
+    // The eye icon only switches visibility; it does not select the repository
+    const toggle = e.target.closest(".dd-toggle");
+    if (toggle) {
+      e.stopPropagation();
+      toggleExample(repos[+toggle.dataset.index]);
+      return;
+    }
     const li = e.target.closest(".dd-item");
     if (li) chooseRepo(repos[+li.dataset.index].repo);
   });
@@ -613,12 +961,15 @@
 
   // ---------- Repositories ----------
   function updateControls() {
-    // The question box always works (greetings need no repository). Only the suggestions need one.
-    $("question").disabled = streaming;
-    $("sendBtn").disabled = false;          // stays enabled while streaming: it becomes the Stop button
+    // The question box always works (greetings need no repository), unless an old chat is read-only
+    $("question").disabled = streaming || readOnlyChat;
+    $("question").placeholder = readOnlyChat
+      ? "This repository is no longer available. Start a new chat."
+      : "Ask about the code...";
+    $("sendBtn").disabled = readOnlyChat && !streaming;   // while streaming it becomes the Stop button
     $("repoBtn").disabled = !hasRepo;
     $("deleteBtn").disabled = !hasRepo;
-    document.querySelectorAll(".chip").forEach((c) => { c.disabled = !hasRepo || streaming; });
+    document.querySelectorAll(".chip").forEach((c) => { c.disabled = !hasRepo || streaming || readOnlyChat; });
   }
 
   async function loadRepos(preferred) {
@@ -628,10 +979,11 @@
     hasRepo = repos.length > 0;
     if (preferred && repos.some((r) => r.repo === preferred)) selectedRepo = preferred;
     else if (!repos.some((r) => r.repo === selectedRepo)) selectedRepo = hasRepo ? repos[0].repo : "";
-    if (before !== selectedRepo) chatHistory = [];
     closeDropdown(false);
     renderDropdown();
-    updateControls();
+    updateSlots();
+    if (before !== selectedRepo) newChat();
+    else { updateControls(); updateChatHead(); }
     loadTree();
   }
 
@@ -650,12 +1002,16 @@
   $("filesBox").addEventListener("toggle", loadTree);
 
   $("deleteBtn").onclick = async () => {
-    const repo = selectedRepo;
-    if (!repo) return;
-    if (!confirm("Delete " + repo + " and all its indexed data?")) return;
+    const r = currentRepo();
+    if (!r) return;
+    let question = "Delete " + r.repo + " and all its indexed data?";
+    if (me.is_admin && r.is_example) question = r.repo + " is an example shown to all visitors. Delete it for everyone?";
+    else if (!me.is_admin) question = "Remove " + r.repo + " from your list?";
+    if (!confirm(question)) return;
     try {
-      await api("/repos/" + repo, { method: "DELETE" });
-      setStatus("Deleted " + repo + ".", "ok");
+      await api("/repos/" + r.repo, { method: "DELETE" });
+      setStatus("Removed " + r.repo + ".", "ok");
+      await loadMe();
       await loadRepos();
     } catch (e) {
       setStatus(e.message, "err");
@@ -693,23 +1049,169 @@
     $("repoUrl").disabled = true;
     setStatus("", "");
     showProgress(0, "Starting...");
+    indexing = true;
+    updateSlots();               // the counter drops as soon as indexing starts
     try {
       const start = await api("/index-repo", { method: "POST", body: JSON.stringify({ repo_url: url }) });
-      const r = await waitForJob(start.job_id);
-      setStatus("Indexed " + r.repo + ": " + r.total_files + " files, " + r.total_chunks + " chunks.", "ok");
+      indexing = false;
+      await loadMe();            // the server has counted this repository now
+      let repoName;
+      let message;
+      if (start.status === "ready") {
+        // Someone already indexed this repository, so it was added without new embeddings
+        repoName = start.repo;
+        message = "Added " + repoName + " to your list.";
+      } else {
+        const r = await waitForJob(start.job_id);
+        repoName = r.repo;
+        message = "Indexed " + r.repo + ": " + r.total_files + " files, " + r.total_chunks + " chunks.";
+      }
       $("repoUrl").value = "";
-      await loadRepos(r.repo);
-      await sleep(1000);
+      await loadRepos(repoName);
+      setStatus(message, "ok", 5000);
+      await sleep(600);
     } catch (e) {
       setStatus(e.message, "err");
     } finally {
+      indexing = false;
       $("progress").hidden = true;
       $("indexBtn").disabled = false;
       $("repoUrl").disabled = false;
+      loadMe().catch(() => {});  // sync the counter (a failed indexing is not counted)
     }
   }
   // A form makes the Enter key work, including the "Go" key on mobile keyboards
   $("indexForm").addEventListener("submit", (e) => { e.preventDefault(); indexRepo(); });
+
+  // ---------- Chat history (stored in this browser) ----------
+  function readChats() {
+    try {
+      const data = JSON.parse(localStorage.getItem(loadedChatKey) || "[]");
+      return Array.isArray(data) ? data : [];
+    } catch (e) { return []; }
+  }
+
+  function persistChats() {
+    chats = chats.slice(0, MAX_CHATS);
+    // If the browser storage is full, drop the oldest chats until it fits
+    while (true) {
+      try { localStorage.setItem(loadedChatKey, JSON.stringify(chats)); return; }
+      catch (e) { if (chats.length <= 1) return; chats.pop(); }
+    }
+  }
+
+  function newId() { return Date.now().toString(36) + Math.random().toString(36).slice(2, 7); }
+
+  function renderHistory() {
+    const list = $("historyList");
+    list.innerHTML = "";
+    if (!chats.length) {
+      list.innerHTML = '<li class="history-empty">Your conversations will appear here.</li>';
+      return;
+    }
+    chats.forEach((c) => {
+      const li = document.createElement("li");
+      li.className = "h-item" + (c.id === activeChatId ? " active" : "");
+      li.dataset.id = c.id;
+      li.innerHTML =
+        '<button type="button" class="h-open" title="' + esc(c.title) + '">' +
+        '<span class="h-title">' + esc(c.title) + "</span>" +
+        '<span class="h-sub">' + esc(c.repo) + " &middot; " + timeAgo(c.updated) + "</span></button>" +
+        '<button type="button" class="h-del" title="Delete this chat" aria-label="Delete this chat">' + svg("trash") + "</button>";
+      list.appendChild(li);
+    });
+  }
+
+  function updateChatHead() {
+    const c = chats.find((x) => x.id === activeChatId);
+    const repo = c ? c.repo : selectedRepo;
+    $("chatRepo").textContent = repo ? repo + (readOnlyChat ? " (unavailable)" : "") : "";
+  }
+
+  // Creates the chat of the first question right away, so it shows up in the history immediately
+  function ensureChat(repo, question) {
+    let chat = chats.find((c) => c.id === activeChatId);
+    if (!chat) {
+      const title = question.length > 60 ? question.slice(0, 57) + "..." : question;
+      chat = { id: newId(), repo, title, created: Date.now(), updated: Date.now(), messages: [] };
+      chats.unshift(chat);
+      activeChatId = chat.id;
+      persistChats();
+      renderHistory();
+      updateChatHead();
+    }
+    return chat.id;
+  }
+
+  function appendToChat(chatId, question, answer, sources) {
+    const chat = chats.find((c) => c.id === chatId);
+    if (!chat) return;   // the chat was deleted while the answer was streaming
+    chat.messages.push({ role: "user", text: question }, { role: "assistant", text: answer, sources: sources || [] });
+    chat.messages = chat.messages.slice(-MAX_MESSAGES);
+    chat.updated = Date.now();
+    chats.sort((a, b) => b.updated - a.updated);
+    persistChats();
+    renderHistory();
+  }
+
+  // A question that failed leaves an empty chat behind. Remove it.
+  function dropIfEmpty(chatId) {
+    const i = chats.findIndex((c) => c.id === chatId && c.messages.length === 0);
+    if (i < 0) return;
+    chats.splice(i, 1);
+    if (activeChatId === chatId) activeChatId = null;
+    persistChats();
+    renderHistory();
+    updateChatHead();
+  }
+
+  function openChat(id) {
+    const chat = chats.find((c) => c.id === id);
+    if (!chat) return;
+    stopStreaming();
+    activeChatId = id;
+    answers = {};
+    const available = repos.some((r) => r.repo === chat.repo);
+    if (available && chat.repo !== selectedRepo) {
+      selectedRepo = chat.repo;
+      renderDropdown();
+      loadTree();
+    }
+    readOnlyChat = !available;
+    chatHistory = chat.messages.slice(-12).map((m) => ({ role: m.role, content: m.text }));
+
+    $("chat").innerHTML = "";
+    chat.messages.forEach((m) => {
+      if (m.role === "user") addUserMessage(m.text);
+      else addSavedBotMessage(chat.repo, m);
+    });
+    if (readOnlyChat) {
+      const note = document.createElement("div");
+      note.className = "empty";
+      note.textContent = "The repository of this conversation (" + chat.repo + ") is no longer available. " +
+        "You can read the conversation, but to ask new questions please start a new chat.";
+      $("chat").appendChild(note);
+    }
+    updateControls();
+    updateChatHead();
+    renderHistory();
+    scrollChat();
+  }
+
+  function deleteChat(id) {
+    if (!confirm("Delete this conversation?")) return;
+    chats = chats.filter((c) => c.id !== id);
+    persistChats();
+    if (activeChatId === id) newChat();
+    else renderHistory();
+  }
+
+  $("historyList").addEventListener("click", (e) => {
+    const item = e.target.closest(".h-item");
+    if (!item) return;
+    if (e.target.closest(".h-del")) deleteChat(item.dataset.id);
+    else openChat(item.dataset.id);
+  });
 
   // ---------- Chat ----------
   function isMobileLayout() { return window.matchMedia("(max-width: 900px)").matches; }
@@ -742,6 +1244,26 @@
       '<div class="sources" hidden></div><div class="msg-actions" hidden></div>';
     $("chat").appendChild(div);
     return div;
+  }
+
+  function attachCopy(actionsEl, msgId) {
+    actionsEl.innerHTML = '<button type="button" class="btn-ghost btn-sm copy-answer" data-msg="' + msgId + '">' +
+      svg("copy") + "<span>Copy answer</span></button>";
+    actionsEl.hidden = false;
+  }
+
+  // Shows an answer that was saved in the chat history
+  function addSavedBotMessage(repo, m) {
+    const msgId = ++msgCounter;
+    const el = addBotMessage();
+    el.querySelector(".answer").innerHTML = renderMarkdown(m.text, msgId);
+    if (m.sources && m.sources.length) {
+      const s = el.querySelector(".sources");
+      s.innerHTML = buildSources(repo, m.sources, msgId);
+      s.hidden = false;
+    }
+    answers[msgId] = m.text;
+    attachCopy(el.querySelector(".msg-actions"), msgId);
   }
 
   function buildSources(repo, sources, msgId) {
@@ -790,10 +1312,11 @@
   }
 
   async function ask(question) {
-    if (streaming) return;
+    if (streaming || readOnlyChat) return;
     const repo = selectedRepo;
     setStreaming(true);
     addUserMessage(question);
+    const chatId = ensureChat(repo, question);
     const msgId = ++msgCounter;
     const msgEl = addBotMessage();
     scrollChat();
@@ -802,8 +1325,10 @@
     const sourcesEl = msgEl.querySelector(".sources");
     const actionsEl = msgEl.querySelector(".msg-actions");
     let raw = "";
+    let lastSources = [];
     let scheduled = false;
     let finished = false;
+    let aborted = false;
     abortCtl = new AbortController();
 
     // Re-render at most once per animation frame while text streams in
@@ -820,6 +1345,7 @@
         abortCtl.signal,
         (ev) => {
           if (ev.type === "sources") {
+            lastSources = ev.sources;
             if (ev.sources.length) {
               sourcesEl.innerHTML = buildSources(repo, ev.sources, msgId);
               sourcesEl.hidden = false;
@@ -835,26 +1361,34 @@
       finished = true;
     } catch (e) {
       if (e.name === "AbortError") {
+        aborted = true;
         raw += (raw ? "\n\n" : "") + "_Stopped._";
       } else {
-        answerEl.innerHTML = '<span style="color:var(--err)">' + esc(e.message) + "</span>";
+        answerEl.innerHTML = '<span style="color:var(--err-text)">' + esc(e.message) + "</span>";
         raw = "";
       }
     } finally {
       abortCtl = null;
+      const stillHere = chatId === activeChatId;
       if (raw) {
         answerEl.innerHTML = renderMarkdown(raw, msgId);
         answers[msgId] = raw;
-        actionsEl.innerHTML = '<button type="button" class="btn-ghost btn-sm copy-answer" data-msg="' + msgId + '">' + svg("copy") + "<span>Copy answer</span></button>";
-        actionsEl.hidden = false;
+        attachCopy(actionsEl, msgId);
       }
-      if (finished && raw && repo === selectedRepo) {
-        chatHistory.push({ role: "user", content: question }, { role: "assistant", content: raw });
-        chatHistory = chatHistory.slice(-12);
+      if (raw && (finished || aborted)) {
+        appendToChat(chatId, question, raw, lastSources);
+        if (finished && stillHere) {
+          chatHistory.push({ role: "user", content: question }, { role: "assistant", content: raw });
+          chatHistory = chatHistory.slice(-12);
+        }
+      } else {
+        dropIfEmpty(chatId);
       }
       setStreaming(false);
-      scrollChat();
-      if (window.matchMedia("(pointer: fine)").matches) $("question").focus();
+      if (stillHere) {
+        scrollChat();
+        if (window.matchMedia("(pointer: fine)").matches) $("question").focus();
+      }
     }
   }
 
@@ -862,9 +1396,14 @@
 
   function newChat() {
     stopStreaming();
+    activeChatId = null;
+    readOnlyChat = false;
     chatHistory = [];
     answers = {};
     $("chat").innerHTML = '<div class="empty" id="emptyState">New chat started. Ask a question or tap a suggestion.</div>';
+    renderHistory();
+    updateChatHead();
+    updateControls();
   }
   $("newChatBtn").onclick = newChat;
 
@@ -934,8 +1473,10 @@
   const isTyping = (el) => el && (el.tagName === "INPUT" || el.tagName === "TEXTAREA");
 
   document.addEventListener("keydown", (e) => {
-    if (ddOpen && handleDropdownKey(e)) return;
     const t = e.target;
+    if (t.closest && t.closest("dialog")) return;   // the login dialog handles its own keys
+    if (t.id === "resizer") return;                 // the resize handle handles its own keys
+    if (ddOpen && handleDropdownKey(e)) return;
     if (e.key === "Escape") {
       if (streaming) { stopStreaming(); e.preventDefault(); }
       else if (isTyping(t)) t.blur();
@@ -967,7 +1508,10 @@
 
   // ---------- Start ----------
   setStreaming(false);
-  loadRepos().catch((e) => setStatus(e.message, "err"));
-</script>docker compose up -d
+  // /me first: it also gives a new visitor their anonymous session cookie
+  loadMe()
+    .then(() => loadRepos())
+    .catch((e) => setStatus(e.message, "err"));
+</script>
 </body>
 </html>
